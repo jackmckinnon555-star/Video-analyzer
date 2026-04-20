@@ -1,10 +1,38 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUpload, type UploadState } from "../hooks/useUpload";
+import { estimateCompression, type Estimate } from "../lib/compressStreaming";
 import { formatBytes } from "../lib/format";
 
+const SUPPORTED_EXT = new Set([
+  "mp4", "mov", "m4v", "mkv", "webm", "avi", "wmv",
+  "mp3", "m4a", "wav", "aac", "ogg", "opus", "flac",
+]);
+
 export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
-  const { state, upload, reset } = useUpload();
+  const { state, upload, cancel, reset } = useUpload();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [estError, setEstError] = useState<string | null>(null);
+
+  // When a new file arrives (state.file set) and we haven't started compressing
+  // yet, pre-compute the estimate.
+  useEffect(() => {
+    setEstimate(null);
+    setEstError(null);
+    if (!state.file || state.phase !== "estimating") return;
+    let cancelled = false;
+    estimateCompression(state.file)
+      .then((e) => {
+        if (!cancelled) setEstimate(e);
+      })
+      .catch((err) => {
+        if (!cancelled) setEstError(err instanceof Error ? err.message : "Couldn't read file");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.file, state.phase]);
 
   async function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -20,13 +48,33 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
   }
 
   const busy =
+    state.phase === "estimating" ||
     state.phase === "compressing" ||
     state.phase === "presigning" ||
     state.phase === "uploading" ||
     state.phase === "finalizing";
+  const showActive = busy || state.phase === "done" || state.phase === "error" || state.phase === "canceled";
 
   return (
-    <div className="rounded-lg border border-dashed border-neutral-300 p-6 text-center dark:border-neutral-700">
+    <div className="rounded-lg border border-dashed border-neutral-300 p-6 dark:border-neutral-700">
+      {!showActive && (
+        <IdleView
+          onClick={() => inputRef.current?.click()}
+          onToggleHelp={() => setShowHelp((v) => !v)}
+          showHelp={showHelp}
+        />
+      )}
+
+      {showActive && (
+        <ActiveView
+          state={state}
+          estimate={estimate}
+          estError={estError}
+          onCancel={cancel}
+          onReset={reset}
+        />
+      )}
+
       <input
         ref={inputRef}
         type="file"
@@ -34,114 +82,363 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
         hidden
         onChange={onChange}
       />
+
+      <div className="mt-4 border-t border-neutral-200 pt-3 text-center text-[11px] text-neutral-400 dark:border-neutral-800">
+        Power users:{" "}
+        <a
+          href="/compress-tool/"
+          target="_blank"
+          rel="noopener"
+          className="underline underline-offset-2 hover:text-neutral-600 dark:hover:text-neutral-300"
+        >
+          10× faster local compression with ffmpeg →
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// ─── Idle state ─────────────────────────────────────────────────────────────
+
+function IdleView({
+  onClick,
+  onToggleHelp,
+  showHelp,
+}: {
+  onClick: () => void;
+  onToggleHelp: () => void;
+  showHelp: boolean;
+}) {
+  return (
+    <div className="text-center">
       <button
-        onClick={() => inputRef.current?.click()}
-        disabled={busy}
-        className="min-h-[44px] rounded-md bg-neutral-900 px-6 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+        onClick={onClick}
+        className="min-h-[44px] rounded-md bg-neutral-900 px-6 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
         aria-label="Upload a video"
       >
-        {busy ? "Working…" : "Upload a video"}
+        Upload a video
       </button>
       <p className="mt-2 text-xs text-neutral-500">
-        Files over 45 MB are compressed in your browser before upload.
+        Any size. Your browser shrinks large files automatically before upload.
+        <button
+          onClick={onToggleHelp}
+          className="ml-1 rounded-full border border-neutral-300 px-1.5 py-0 text-[10px] text-neutral-500 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          aria-label="How it works"
+          aria-expanded={showHelp}
+        >
+          ?
+        </button>
       </p>
 
-      {state.phase !== "idle" && (
-        <div className="mt-4 flex flex-col items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
-          <StatusLine state={state} />
-          <ProgressBar phase={state.phase} progress={state.progress} />
-          {state.compress?.mode === "audio-only" && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              Video is too long to fit under 50 MB at watchable quality — falling back to audio-only.
-              Transcript + chapters + highlights will still work. No preview playback.
-            </p>
-          )}
-        </div>
+      {showHelp && (
+        <ol className="mx-auto mt-3 max-w-md space-y-1 rounded-md bg-neutral-50 p-3 text-left text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+          <li>
+            <strong className="text-neutral-800 dark:text-neutral-200">1.</strong>{" "}
+            Drop any video here, any size.
+          </li>
+          <li>
+            <strong className="text-neutral-800 dark:text-neutral-200">2.</strong>{" "}
+            If it's large, your browser shrinks it first —{" "}
+            <em>stays on your computer until it's ready.</em>
+          </li>
+          <li>
+            <strong className="text-neutral-800 dark:text-neutral-200">3.</strong>{" "}
+            Analysis takes 2–5 min after upload. You'll see chapters,
+            transcript, and highlights.
+          </li>
+        </ol>
+      )}
+    </div>
+  );
+}
+
+// ─── Active states (estimate / compress / upload / done / error) ───────────
+
+function ActiveView({
+  state,
+  estimate,
+  estError,
+  onCancel,
+  onReset,
+}: {
+  state: UploadState;
+  estimate: Estimate | null;
+  estError: string | null;
+  onCancel: () => void;
+  onReset: () => void;
+}) {
+  const name = state.file?.name ?? "Your video";
+  const size = state.file?.size ?? state.originalSizeBytes ?? null;
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  const supported = SUPPORTED_EXT.has(ext);
+
+  return (
+    <div>
+      {/* Header row: filename + format chip + size */}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="truncate font-medium">{name}</span>
+        <span className="text-xs text-neutral-500">
+          {size != null ? formatBytes(size) : ""}
+        </span>
+        {ext && (
+          <span
+            className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+              supported
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+            }`}
+            title={supported ? "Common format — expected to work" : "Unusual format — let's try anyway"}
+          >
+            .{ext}
+          </span>
+        )}
+      </div>
+
+      {/* Phase bodies */}
+      {state.phase === "estimating" && (
+        <EstimatingBody estimate={estimate} estError={estError} onCancel={onCancel} />
+      )}
+
+      {state.phase === "compressing" && (
+        <CompressingBody state={state} estimate={estimate} onCancel={onCancel} />
+      )}
+
+      {state.phase === "presigning" && (
+        <SimpleBody message="Getting ready to upload…" />
+      )}
+
+      {state.phase === "uploading" && (
+        <UploadingBody state={state} />
+      )}
+
+      {state.phase === "finalizing" && (
+        <SimpleBody message="Queuing for processing…" />
+      )}
+
+      {state.phase === "done" && (
+        <DoneBody onReset={onReset} />
+      )}
+
+      {state.phase === "canceled" && (
+        <CanceledBody onReset={onReset} />
       )}
 
       {state.phase === "error" && (
-        <button onClick={reset} className="mt-2 text-xs text-neutral-500 underline">
-          Try again
-        </button>
+        <ErrorBody state={state} onReset={onReset} />
       )}
     </div>
   );
 }
 
-function StatusLine({ state }: { state: UploadState }) {
-  if (state.phase === "compressing") {
-    const c = state.compress;
-    if (!c) return <>Preparing compressor…</>;
-    if (c.phase === "loading") return <>Loading in-browser compressor (first time only)…</>;
-    if (c.phase === "reading") return <>Reading video metadata…</>;
-    if (c.phase === "buffering") return <>{c.message ?? "Buffering file into memory…"}</>;
-    if (c.phase === "finalizing") return <>{c.message ?? "Finalizing output…"}</>;
-    if (c.phase === "failed") return <span className="text-red-600">{c.message ?? "Compression failed"}</span>;
-    if (c.phase === "compressing") {
-      const dur = c.durationSeconds ? ` · ${Math.round(c.durationSeconds / 60)} min source` : "";
-      const br = c.targetBitrateKbps ? ` @ ${c.targetBitrateKbps} kbps` : "";
-      const eta = c.etaSeconds != null ? ` · ~${formatEta(c.etaSeconds)} left` : "";
-      return (
-        <>
-          Compressing ({c.mode ?? "video"}{br}){dur} · {Math.round(c.progress * 100)}%{eta}
-        </>
-      );
-    }
-    return <>Compressing…</>;
-  }
-  if (state.phase === "presigning") return <>Requesting upload URL…</>;
-  if (state.phase === "uploading")
-    return (
-      <>
-        Uploading {state.finalSizeBytes ? formatBytes(state.finalSizeBytes) : ""}… {Math.round(state.progress * 100)}%
-      </>
-    );
-  if (state.phase === "finalizing") return <>Queuing for processing…</>;
-  if (state.phase === "done")
-    return <span className="text-emerald-600">Queued. Processing will start shortly.</span>;
-  if (state.phase === "error") {
-    const msg = state.error ?? "";
-    // Turn the compress-tool URL mention into a real clickable link.
-    const tool = msg.match(/\/compress-tool\/?/);
-    if (tool) {
-      const before = msg.slice(0, tool.index!);
-      return (
-        <span className="text-red-600">
-          Error: {before}
-          <a
-            href="/compress-tool/"
-            target="_blank"
-            rel="noopener"
-            className="underline underline-offset-2"
-          >
-            open the compression tool →
-          </a>
-        </span>
-      );
-    }
-    return <span className="text-red-600">Error: {msg}</span>;
-  }
-  return null;
-}
-
-function formatEta(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${h}h ${mm}m`;
-}
-
-function ProgressBar({ phase, progress }: { phase: UploadState["phase"]; progress: number }) {
-  if (phase === "idle" || phase === "error" || phase === "done") return null;
+function EstimatingBody({
+  estimate,
+  estError,
+  onCancel,
+}: {
+  estimate: Estimate | null;
+  estError: string | null;
+  onCancel: () => void;
+}) {
   return (
-    <div className="h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+    <div className="mt-3 rounded-md bg-neutral-50 p-3 text-sm dark:bg-neutral-900">
+      {estError ? (
+        <p className="text-red-600">Couldn't read the file: {estError}</p>
+      ) : !estimate ? (
+        <p className="text-neutral-500">Reading your video…</p>
+      ) : estimate.mode === "passthrough" ? (
+        <p className="text-neutral-700 dark:text-neutral-300">
+          Small enough to upload as-is. Starting upload…
+        </p>
+      ) : (
+        <div className="space-y-1 text-neutral-700 dark:text-neutral-300">
+          <p>
+            <strong>{humanDuration(estimate.durationSeconds)}</strong> of{" "}
+            {estimate.mode === "audio-only" ? "audio" : "video"}. Your browser
+            will shrink it to about{" "}
+            <strong>{formatBytes(estimate.estimatedOutputBytes)}</strong> so it
+            fits the 50 MB upload slot.
+          </p>
+          <p className="text-xs text-neutral-500">
+            Takes about <strong>{humanDuration(estimate.estimatedSeconds)}</strong> — keep this tab open. Your original file isn't changed.
+          </p>
+        </div>
+      )}
+      <div className="mt-3 flex justify-end">
+        <button
+          onClick={onCancel}
+          className="rounded-md border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const ROTATING_MESSAGES = [
+  "Reading your video…",
+  "Extracting the audio…",
+  "Encoding to save space…",
+  "Still going — this is normal for long videos.",
+  "Keep this tab open…",
+];
+
+function CompressingBody({
+  state,
+  estimate,
+  onCancel,
+}: {
+  state: UploadState;
+  estimate: Estimate | null;
+  onCancel: () => void;
+}) {
+  const c = state.compress;
+  const [msgIdx, setMsgIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setMsgIdx((i) => (i + 1) % ROTATING_MESSAGES.length), 4500);
+    return () => clearInterval(id);
+  }, []);
+
+  const pct = Math.round((c?.progress ?? 0) * 100);
+  const etaLabel = c?.etaSeconds != null ? humanDuration(c.etaSeconds) : null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      <ProgressBar progress={c?.overallProgress ?? 0.05} />
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+        <span className="font-medium">
+          {c?.phase === "loading" && "Getting the compressor ready…"}
+          {c?.phase === "reading" && "Checking the file…"}
+          {c?.phase === "mounting" && "Getting your file ready…"}
+          {c?.phase === "compressing" &&
+            `Shrinking your video… ${pct}%${etaLabel ? ` · about ${etaLabel} left` : ""}`}
+          {c?.phase === "finalizing" && "Almost done — packaging the result…"}
+          {!c && "Starting…"}
+        </span>
+      </div>
+      <p className="text-xs text-neutral-500">{ROTATING_MESSAGES[msgIdx]}</p>
+      {estimate && c?.phase === "compressing" && (
+        <p className="text-xs text-neutral-500">
+          Shrinking{" "}
+          <strong>{humanDuration(estimate.durationSeconds)}</strong>{" "}
+          of {estimate.mode === "audio-only" ? "audio" : "video"} to about{" "}
+          <strong>{formatBytes(estimate.estimatedOutputBytes)}</strong>.
+        </p>
+      )}
+      <div className="flex justify-end pt-1">
+        <button
+          onClick={onCancel}
+          className="rounded-md border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UploadingBody({ state }: { state: UploadState }) {
+  const pct = Math.round((state.progress ?? 0) * 100);
+  return (
+    <div className="mt-3 space-y-2">
+      <ProgressBar progress={state.progress ?? 0} />
+      <p className="text-sm font-medium">
+        Uploading… {pct}%
+        {state.finalSizeBytes ? ` (${formatBytes(state.finalSizeBytes)})` : ""}
+      </p>
+    </div>
+  );
+}
+
+function SimpleBody({ message }: { message: string }) {
+  return (
+    <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-400">{message}</p>
+  );
+}
+
+function DoneBody({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+      <span>Queued. Processing will start shortly.</span>
+      <button
+        onClick={onReset}
+        className="rounded-md border border-emerald-300 bg-white px-3 py-1 text-xs text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 dark:hover:bg-emerald-900/50"
+      >
+        Upload another
+      </button>
+    </div>
+  );
+}
+
+function CanceledBody({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-neutral-50 p-3 text-sm text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
+      <span>Canceled.</span>
+      <button
+        onClick={onReset}
+        className="rounded-md border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+      >
+        Start over
+      </button>
+    </div>
+  );
+}
+
+function ErrorBody({ state, onReset }: { state: UploadState; onReset: () => void }) {
+  return (
+    <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300">
+      <p className="font-medium">Something went wrong.</p>
+      <p className="mt-1 text-xs">{state.error}</p>
+      {state.errorHint && (
+        <p className="mt-2 text-xs text-red-800 dark:text-red-200">{state.errorHint}</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          onClick={onReset}
+          className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-red-950 dark:text-red-200 dark:hover:bg-red-900/50"
+        >
+          Try again
+        </button>
+        <a
+          href="/compress-tool/"
+          target="_blank"
+          rel="noopener"
+          className="rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+        >
+          Faster local tool →
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared bits ───────────────────────────────────────────────────────────
+
+function ProgressBar({ progress }: { progress: number }) {
+  const pct = Math.max(2, Math.min(100, progress * 100));
+  return (
+    <div
+      className="h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800"
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <div
-        className="h-full bg-neutral-900 transition-[width] duration-150 dark:bg-white"
-        style={{ width: `${Math.max(2, Math.min(100, progress * 100))}%` }}
+        className="h-full bg-neutral-900 transition-[width] duration-200 dark:bg-white"
+        style={{ width: `${pct}%` }}
       />
     </div>
   );
+}
+
+function humanDuration(seconds: number): string {
+  if (seconds < 1) return "a moment";
+  if (seconds < 60) return `${Math.round(seconds)} sec`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return m === 1 ? "1 minute" : `${m} minutes`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  if (mm === 0) return h === 1 ? "1 hour" : `${h} hours`;
+  return `${h}h ${mm}m`;
 }

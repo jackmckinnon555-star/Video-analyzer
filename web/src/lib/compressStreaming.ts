@@ -25,7 +25,8 @@ export type StreamPhase =
   | "compressing"
   | "finalizing"
   | "done"
-  | "failed";
+  | "failed"
+  | "canceled";
 
 export interface StreamProgress {
   phase: StreamPhase;
@@ -36,6 +37,49 @@ export interface StreamProgress {
   durationSeconds?: number;
   etaSeconds?: number | null;
   message?: string;
+}
+
+export class CompressionCanceledError extends Error {
+  constructor() {
+    super("canceled");
+    this.name = "CompressionCanceledError";
+  }
+}
+
+export interface Estimate {
+  durationSeconds: number;
+  mode: "video" | "audio-only" | "passthrough";
+  estimatedOutputBytes: number;
+  estimatedSeconds: number;
+}
+
+/**
+ * Cheap pre-compression estimate using ONLY HTMLVideoElement metadata —
+ * no ffmpeg load, no file read. Good enough for the pre-flight info panel.
+ */
+export async function estimateCompression(file: File): Promise<Estimate> {
+  const durationSeconds = await getVideoDuration(file);
+  // Passthrough if the file is already under the cap.
+  if (file.size <= 45 * 1024 * 1024) {
+    return {
+      durationSeconds,
+      mode: "passthrough",
+      estimatedOutputBytes: file.size,
+      estimatedSeconds: 0,
+    };
+  }
+  const totalBudgetBits = STREAM_TARGET_BYTES * 8;
+  const audioBudgetBits = AUDIO_BITRATE_KBPS * 1000 * durationSeconds;
+  const videoBudgetBits = totalBudgetBits - audioBudgetBits;
+  const videoKbps = Math.max(0, Math.floor(videoBudgetBits / durationSeconds / 1000));
+  const audioOnly = videoKbps < MIN_VIDEO_BITRATE_KBPS;
+  const realtimeFactor = audioOnly ? 1.5 : 0.25;
+  return {
+    durationSeconds,
+    mode: audioOnly ? "audio-only" : "video",
+    estimatedOutputBytes: STREAM_TARGET_BYTES,
+    estimatedSeconds: Math.ceil(durationSeconds / realtimeFactor),
+  };
 }
 
 let _ffmpeg: FFmpeg | null = null;
@@ -80,8 +124,14 @@ function getVideoDuration(file: File): Promise<number> {
 export async function compressStreaming(
   file: File,
   onProgress: (p: StreamProgress) => void,
+  options: { signal?: AbortSignal } = {},
 ): Promise<File> {
+  const signal = options.signal;
+  const throwIfAborted = () => {
+    if (signal?.aborted) throw new CompressionCanceledError();
+  };
   try {
+    throwIfAborted();
     onProgress({
       phase: "loading",
       progress: 0,
@@ -174,13 +224,20 @@ export async function compressStreaming(
     ffmpeg.on("progress", handleProgress);
 
     let watchdogAborted = false;
+    let userCanceled = false;
     const watchdog = setInterval(() => {
+      if (signal?.aborted && !userCanceled) {
+        userCanceled = true;
+        try { ffmpeg.terminate(); } catch { /* already dead */ }
+        clearInterval(watchdog);
+        return;
+      }
       if (performance.now() - lastProgressAt > PROGRESS_WATCHDOG_MS) {
         watchdogAborted = true;
         try { ffmpeg.terminate(); } catch { /* already dead */ }
         clearInterval(watchdog);
       }
-    }, 5000);
+    }, 2000);
 
     const args = audioOnly
       ? [
@@ -219,6 +276,11 @@ export async function compressStreaming(
     try {
       await ffmpeg.exec(args);
     } catch (err) {
+      if (userCanceled) {
+        _ffmpeg = null;
+        _loadPromise = null;
+        throw new CompressionCanceledError();
+      }
       if (watchdogAborted) {
         _ffmpeg = null;
         _loadPromise = null;
@@ -232,6 +294,8 @@ export async function compressStreaming(
       ffmpeg.off?.("progress", handleProgress);
       await ffmpeg.unmount(MOUNT_POINT).catch(() => {});
     }
+
+    throwIfAborted();
 
     onProgress({
       phase: "finalizing",
@@ -266,6 +330,15 @@ export async function compressStreaming(
     });
     return outFile;
   } catch (err) {
+    if (err instanceof CompressionCanceledError) {
+      onProgress({
+        phase: "canceled",
+        progress: 0,
+        overallProgress: 0,
+        message: "Canceled",
+      });
+      throw err;
+    }
     onProgress({
       phase: "failed",
       progress: 0,
