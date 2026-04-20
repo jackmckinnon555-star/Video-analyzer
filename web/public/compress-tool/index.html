@@ -132,9 +132,18 @@
       <div class="container">
         <h1>Compress large videos locally</h1>
         <p class="lede">
-          The in-browser compressor tops out near 2 GB. Bigger videos need a
-          quick native pre-pass — runs in 30-90 s for a 3-hour talk and
-          produces a file the uploader accepts directly.
+          The uploader's default in-browser compressor tops out near 2 GB.
+          Two alternatives for bigger videos:
+        </p>
+        <div class="callout">
+          <strong>Prefer no install?</strong> A streaming browser
+          compressor at <a href="/compress">/compress</a> handles any
+          file size in your browser (slower — runs at ~0.25× realtime
+          single-threaded, so a 3-hour talk takes 10-15 min).
+        </div>
+        <p class="lede" style="margin-top:20px">
+          Or use native ffmpeg below — same output, ~2-5× realtime
+          (3-hour talk = 30-90 seconds). Requires ffmpeg to be installed.
         </p>
 
         <h2>1. Install ffmpeg (once)</h2>

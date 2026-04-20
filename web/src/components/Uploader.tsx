@@ -43,14 +43,26 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
         {busy ? "Working…" : "Upload a video"}
       </button>
       <p className="mt-2 text-xs text-neutral-500">
-        Files over 45 MB are compressed in your browser before upload.{" "}
+        Files over 45 MB are compressed in your browser before upload.
+      </p>
+      <p className="mt-1 text-xs text-neutral-500">
+        Over 2 GB?{" "}
+        <a
+          href="/compress"
+          target="_blank"
+          rel="noopener"
+          className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
+        >
+          streaming browser compressor
+        </a>{" "}
+        ·{" "}
         <a
           href="/compress-tool/"
           target="_blank"
           rel="noopener"
           className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
         >
-          Over 2 GB? Compress locally first →
+          native ffmpeg script (faster)
         </a>
       </p>
 

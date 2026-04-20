@@ -10,6 +10,7 @@ import { useTheme } from "./hooks/useTheme";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const VideoResult = lazy(() => import("./pages/VideoResult"));
 const PublicVideoResult = lazy(() => import("./pages/PublicVideoResult"));
+const Compress = lazy(() => import("./pages/Compress"));
 
 export default function App() {
   // Ensure the theme hook mounts at the app root so the html class is applied
@@ -23,15 +24,18 @@ export default function App() {
     setUnlocked(false);
   }, []);
 
-  // Public share pages bypass the password gate. Detect by path prefix.
-  const isPublicRoute =
-    typeof window !== "undefined" && window.location.pathname.startsWith("/p/");
+  // Public routes bypass the password gate:
+  //   /p/:slug    read-only share pages
+  //   /compress   browser compressor (100% client-side)
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const isPublicRoute = path.startsWith("/p/") || path === "/compress" || path.startsWith("/compress/");
 
   if (isPublicRoute) {
     return (
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/p/:slug" element={<PublicVideoResult />} />
+          <Route path="/compress" element={<Compress />} />
         </Routes>
       </Suspense>
     );
