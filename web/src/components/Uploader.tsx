@@ -74,6 +74,9 @@ function StatusLine({ state }: { state: UploadState }) {
     if (!c) return <>Preparing compressor…</>;
     if (c.phase === "loading") return <>Loading in-browser compressor (first time only)…</>;
     if (c.phase === "reading") return <>Reading video metadata…</>;
+    if (c.phase === "buffering") return <>{c.message ?? "Buffering file into memory…"}</>;
+    if (c.phase === "finalizing") return <>{c.message ?? "Finalizing output…"}</>;
+    if (c.phase === "failed") return <span className="text-red-600">{c.message ?? "Compression failed"}</span>;
     if (c.phase === "compressing") {
       const dur = c.durationSeconds ? ` · ${Math.round(c.durationSeconds / 60)} min source` : "";
       const br = c.targetBitrateKbps ? ` @ ${c.targetBitrateKbps} kbps` : "";
