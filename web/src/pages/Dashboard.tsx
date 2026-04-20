@@ -6,6 +6,7 @@ import { SkeletonRow } from "../components/SkeletonRow";
 import { AppLogo } from "../components/AppLogo";
 import { SearchBar } from "../components/SearchBar";
 import { ChatSidebar } from "../components/ChatSidebar";
+import { CompressCard } from "../components/CompressCard";
 import { api } from "../lib/api";
 
 export default function Dashboard() {
@@ -42,8 +43,12 @@ export default function Dashboard() {
         <SearchBar />
       </div>
 
-      <div className="mb-8">
+      <div className="mb-4">
         <Uploader />
+      </div>
+
+      <div className="mb-8">
+        <CompressCard />
       </div>
 
       {isLoading && (

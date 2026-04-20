@@ -70,6 +70,17 @@ function Header({ unlocked, onLock }: { unlocked: boolean; onLock: () => void })
           <span>Video Analyzer</span>
         </Link>
         <div className="flex items-center gap-2">
+          {unlocked && (
+            <a
+              href="/compress"
+              target="_blank"
+              rel="noopener"
+              className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              title="Compress a large video before uploading"
+            >
+              Compress
+            </a>
+          )}
           <ThemeToggle />
           {unlocked && (
             <button

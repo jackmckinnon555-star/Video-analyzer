@@ -45,26 +45,6 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
       <p className="mt-2 text-xs text-neutral-500">
         Files over 45 MB are compressed in your browser before upload.
       </p>
-      <p className="mt-1 text-xs text-neutral-500">
-        Over 2 GB?{" "}
-        <a
-          href="/compress"
-          target="_blank"
-          rel="noopener"
-          className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
-        >
-          streaming browser compressor
-        </a>{" "}
-        ·{" "}
-        <a
-          href="/compress-tool/"
-          target="_blank"
-          rel="noopener"
-          className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
-        >
-          native ffmpeg script (faster)
-        </a>
-      </p>
 
       {state.phase !== "idle" && (
         <div className="mt-4 flex flex-col items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
