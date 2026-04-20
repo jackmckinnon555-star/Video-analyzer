@@ -1,11 +1,35 @@
+import { useEffect } from "react";
 import { useVideos } from "../hooks/useVideos";
 import { Uploader } from "../components/Uploader";
 import { VideoRow } from "../components/VideoRow";
 import { SkeletonRow } from "../components/SkeletonRow";
 import { AppLogo } from "../components/AppLogo";
+import { SearchBar } from "../components/SearchBar";
+import { ChatSidebar } from "../components/ChatSidebar";
+import { api } from "../lib/api";
 
 export default function Dashboard() {
   const { data: videos, isLoading, error } = useVideos();
+
+  // Prefetch the first "done" video's preview so clicking into it feels instant.
+  useEffect(() => {
+    const first = videos?.find((v) => v.status === "done" && v.preview_path);
+    if (!first) return;
+    let cancelled = false;
+    api.getPreviewUrl(first.id)
+      .then((r) => {
+        if (cancelled) return;
+        const link = document.createElement("link");
+        link.rel = "prefetch";
+        link.as = "video";
+        link.href = r.url;
+        document.head.appendChild(link);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [videos]);
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -13,6 +37,10 @@ export default function Dashboard() {
       <p className="mb-6 text-sm text-neutral-500">
         Upload long-form video and get a title, timestamped captions, and chapter markers back.
       </p>
+
+      <div className="mb-4">
+        <SearchBar />
+      </div>
 
       <div className="mb-8">
         <Uploader />
@@ -39,6 +67,8 @@ export default function Dashboard() {
           {videos.map((v) => <VideoRow key={v.id} video={v} />)}
         </div>
       )}
+
+      <ChatSidebar />
     </div>
   );
 }

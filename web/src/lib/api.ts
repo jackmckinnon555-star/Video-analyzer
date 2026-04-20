@@ -64,4 +64,46 @@ export const api = {
       body: JSON.stringify({ videoId }),
     });
   },
+  search(body: { query: string; videoId?: string; limit?: number }) {
+    return apiFetch<{
+      results: Array<{
+        id: string;
+        video_id: string;
+        video_title: string;
+        start_seconds: number;
+        end_seconds: number;
+        text: string;
+        similarity: number;
+      }>;
+    }>("/api/search", { method: "POST", body: JSON.stringify(body) });
+  },
+  ragChat(body: { question: string; videoId?: string }) {
+    return apiFetch<{
+      answer: string;
+      sources: Array<{
+        video_id: string;
+        video_title: string;
+        start_seconds: number;
+        snippet: string;
+      }>;
+    }>("/api/rag-chat", { method: "POST", body: JSON.stringify(body) });
+  },
+  generateShowNotes(videoId: string, force = false) {
+    return apiFetch<{ markdown: string; cached: boolean }>(
+      "/api/generate-shownotes",
+      { method: "POST", body: JSON.stringify({ videoId, force }) },
+    );
+  },
+  shareVideo(videoId: string, revoke = false) {
+    return apiFetch<{ ok: true; slug?: string; revoked?: boolean }>(
+      "/api/share-video",
+      { method: "POST", body: JSON.stringify({ videoId, revoke }) },
+    );
+  },
+  translate(videoId: string, targetLanguage: string) {
+    return apiFetch<{ transcript: unknown; cached: boolean }>("/api/translate", {
+      method: "POST",
+      body: JSON.stringify({ videoId, targetLanguage }),
+    });
+  },
 };

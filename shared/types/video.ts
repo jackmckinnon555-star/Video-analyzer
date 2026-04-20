@@ -71,6 +71,9 @@ export interface Video {
   thumbnail_url: string | null;
   preview_path: string | null;
   progress: ProgressInfo | null;
+  show_notes: string | null;
+  translations: Record<string, TranscriptSegment[]> | null;
+  public_slug: string | null;
   error: string | null;
   dispatched_at: string | null;
   created_at: string;

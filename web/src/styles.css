@@ -16,3 +16,22 @@ html, body, #root {
 body {
   @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
 }
+
+/* Visible focus ring on every interactive element — accessibility baseline. */
+*:focus-visible {
+  outline: 2px solid #0B2A4A;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.dark *:focus-visible {
+  outline-color: #C7A35A;
+}
+
+/* Respect prefers-reduced-motion — kill progress bar + skeleton animations. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

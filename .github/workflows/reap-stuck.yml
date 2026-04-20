@@ -1,0 +1,31 @@
+name: Reap Stuck Jobs
+
+# Videos stuck in transient states (queued/transcribing/analyzing/embedding)
+# for more than 30 minutes get marked 'failed' so the user can click Retry.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  reap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark stuck jobs as failed
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          # Use the PATCH endpoint to update rows whose updated_at is older
+          # than 30 minutes AND status is one of the non-terminal ones.
+          CUTOFF=$(date -u -d '30 minutes ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || gdate -u -d '30 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
+          curl -sS -X PATCH "$SUPABASE_URL/rest/v1/videos?status=in.(queued,transcribing,analyzing)&updated_at=lt.$CUTOFF" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=representation" \
+            -d '{"status":"failed","error":"stuck: no progress in 30 min"}' \
+            | tee /tmp/reaped.json
+          COUNT=$(node -e "const d=require('fs').readFileSync('/tmp/reaped.json','utf8'); try{console.log(JSON.parse(d).length)}catch{console.log(0)}")
+          echo "Reaped $COUNT stuck job(s)."

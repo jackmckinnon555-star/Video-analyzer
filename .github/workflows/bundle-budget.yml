@@ -1,0 +1,43 @@
+name: Bundle Budget
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "shared/**"
+      - "package.json"
+      - "package-lock.json"
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "shared/**"
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm --workspace web run build
+      - name: Enforce size budgets
+        run: |
+          set -e
+          INITIAL=$(ls -l web/dist/assets/index-*.js | awk '{s+=$5} END {print s+0}')
+          TOTAL=$(find web/dist/assets -name '*.js' -exec ls -l {} \; | awk '{s+=$5} END {print s+0}')
+          MB() { printf "%.1f MB" "$(echo "$1 / 1048576" | bc -l)"; }
+          echo "Initial bundle: $(MB $INITIAL) (${INITIAL} B)"
+          echo "Total JS:       $(MB $TOTAL) (${TOTAL} B)"
+          if [ "$INITIAL" -gt 524288 ]; then
+            echo "::error::Initial bundle exceeds 512 KB ($(MB $INITIAL))"
+            exit 1
+          fi
+          if [ "$TOTAL" -gt 2097152 ]; then
+            echo "::error::Total JS exceeds 2 MB ($(MB $TOTAL))"
+            exit 1
+          fi

@@ -1,14 +1,16 @@
 import path from "node:path";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { env } from "./lib/env.js";
+import { env, envOptional } from "./lib/env.js";
 import { log } from "./lib/log.js";
+import { sendFailureAlert } from "./lib/alert.js";
 import { probeDurationSeconds } from "./lib/ffmpeg.js";
 import { downloadVideo } from "./pipeline/download.js";
 import { extractAudio, chunkAudio } from "./pipeline/extractAudio.js";
 import { extractFrames } from "./pipeline/extractFrames.js";
 import { transcribeAll, assertAudioHasContent } from "./pipeline/transcribe.js";
 import { analyzeFull } from "./pipeline/analyzeGemini.js";
+import { embedTranscript } from "./pipeline/embed.js";
 import { pickThumbnailDataUrl } from "./pipeline/thumbnail.js";
 import {
   setStatus,
@@ -92,29 +94,80 @@ async function main(): Promise<void> {
     });
 
     // 5. Analyze with Gemini Flash (map-reduce).
+    // Partial-save behavior: if analysis fails after the transcript is saved,
+    // we still complete the video with a placeholder title so the user keeps
+    // the transcript. A retry can re-run analysis later.
     await setStatus(videoId, "analyzing");
-    const analysis = await analyzeFull(segments, frames, (i, total) =>
-      setProgress(videoId, {
+    try {
+      const analysis = await analyzeFull(segments, frames, (i, total) =>
+        setProgress(videoId, {
+          phase: "analyzing",
+          chunk_index: i,
+          total_chunks: total,
+          message: `Analyzing chunk ${i}/${total}`,
+        }),
+      );
+      await saveAnalysis(videoId, analysis);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn("analysis failed — keeping transcript, marking partial", { error: message });
+      await saveAnalysis(videoId, {
+        title: "Transcript only (analysis unavailable)",
+        chapters: [],
+        highlights: [],
+        entities: [],
+        keywords: [],
+        key_quotes: [],
+      });
+      // Surface the analysis error non-fatally so the user can Retry.
+      await markFailed(videoId, `analysis: ${message}`).catch(() => {});
+      await sendFailureAlert({
+        videoId,
         phase: "analyzing",
-        chunk_index: i,
-        total_chunks: total,
-        message: `Analyzing chunk ${i}/${total}`,
-      }),
-    );
-    await saveAnalysis(videoId, analysis);
+        error: message,
+        ghaRunUrl: buildGhaUrl(),
+      }).catch(() => {});
+      return; // Skip embeddings; user can retry.
+    }
 
-    // 6. Done. We intentionally DO NOT delete the upload — it's the preview.
+    // 6. Build semantic-search embeddings. Best-effort — search just won't
+    // find this video if embedding fails, but analysis is still saved.
+    await setProgress(videoId, { phase: "embedding", message: "Building search index" });
+    try {
+      const chunkCount = await embedTranscript(videoId, segments);
+      log.info("embeddings saved", { videoId, chunkCount });
+    } catch (err) {
+      log.warn("embedding failed (continuing)", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // 7. Done. We intentionally DO NOT delete the upload — it's the preview.
     // Storage cleanup happens when the user clicks "Delete" on the dashboard.
     await setStatus(videoId, "done");
-    log.info("worker done", { videoId, title: analysis.title });
+    log.info("worker done", { videoId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error("worker failed", { videoId, message });
     await markFailed(videoId, message).catch(() => {});
+    await sendFailureAlert({
+      videoId,
+      phase: "worker",
+      error: message,
+      ghaRunUrl: buildGhaUrl(),
+    }).catch(() => {});
     process.exitCode = 1;
   } finally {
     await cleanupWorkDir(workDir);
   }
+}
+
+function buildGhaUrl(): string | undefined {
+  const server = envOptional("GITHUB_SERVER_URL") ?? "https://github.com";
+  const repo = envOptional("GITHUB_REPOSITORY");
+  const runId = envOptional("GITHUB_RUN_ID");
+  if (!repo || !runId) return undefined;
+  return `${server}/${repo}/actions/runs/${runId}`;
 }
 
 function framesIntervalSeconds(duration: number): number {

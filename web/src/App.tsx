@@ -9,6 +9,7 @@ import { useTheme } from "./hooks/useTheme";
 // Route-split: dashboard + result aren't needed until after unlock.
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const VideoResult = lazy(() => import("./pages/VideoResult"));
+const PublicVideoResult = lazy(() => import("./pages/PublicVideoResult"));
 
 export default function App() {
   // Ensure the theme hook mounts at the app root so the html class is applied
@@ -21,6 +22,20 @@ export default function App() {
     clearSitePassword();
     setUnlocked(false);
   }, []);
+
+  // Public share pages bypass the password gate. Detect by path prefix.
+  const isPublicRoute =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/p/");
+
+  if (isPublicRoute) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/p/:slug" element={<PublicVideoResult />} />
+        </Routes>
+      </Suspense>
+    );
+  }
 
   return (
     <div className="flex min-h-full flex-col">

@@ -37,7 +37,8 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
       <button
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+        className="min-h-[44px] rounded-md bg-neutral-900 px-6 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+        aria-label="Upload a video"
       >
         {busy ? "Working…" : "Upload a video"}
       </button>

@@ -7,6 +7,8 @@ import { ChapterList } from "../components/ChapterList";
 import { TranscriptViewer } from "../components/TranscriptViewer";
 import { CaptionDownloads } from "../components/CaptionDownloads";
 import { InsightsSidebar } from "../components/InsightsSidebar";
+import { ChatSidebar } from "../components/ChatSidebar";
+import { VideoActions } from "../components/VideoActions";
 import { formatTimestamp } from "../lib/format";
 import { api } from "../lib/api";
 
@@ -86,12 +88,15 @@ export default function VideoResult() {
             {video.uploader_name ? ` · uploaded by ${video.uploader_name}` : ""}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {video.transcript && video.transcript.length > 0 && (
             <CaptionDownloads
               segments={video.transcript}
               baseFilename={video.title || video.filename}
             />
+          )}
+          {video.status === "done" && (
+            <VideoActions video={video} />
           )}
           {video.status === "failed" && (
             <button
@@ -207,6 +212,8 @@ export default function VideoResult() {
           onJump={jump}
         />
       </div>
+
+      <ChatSidebar videoId={video.id} />
     </div>
   );
 }

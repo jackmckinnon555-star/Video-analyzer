@@ -18,13 +18,20 @@ export function adminClient(): SupabaseClient {
  * localStorage after the user types it once.
  */
 export function verifySitePassword(req: Request): void {
+  // Accept current password OR a previous one during a rotation window.
+  // Set SITE_PASSWORD to the new value + SITE_PASSWORD_PREVIOUS to the old.
+  // Once the team has rotated, remove SITE_PASSWORD_PREVIOUS.
   const expected = process.env.SITE_PASSWORD;
-  if (!expected) throw httpError(500, "SITE_PASSWORD not configured");
+  const previous = process.env.SITE_PASSWORD_PREVIOUS;
+  if (!expected && !previous) throw httpError(500, "SITE_PASSWORD not configured");
   const got =
     req.headers.get("x-site-password") ??
     req.headers.get("X-Site-Password") ??
     "";
-  if (!timingEqual(got, expected)) throw httpError(401, "Invalid site password");
+  const ok =
+    (expected && timingEqual(got, expected)) ||
+    (previous && timingEqual(got, previous));
+  if (!ok) throw httpError(401, "Invalid site password");
 }
 
 function timingEqual(a: string, b: string): boolean {
