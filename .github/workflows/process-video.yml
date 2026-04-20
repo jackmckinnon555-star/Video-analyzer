@@ -1,0 +1,57 @@
+name: Process Video
+
+on:
+  repository_dispatch:
+    types: [process-video]
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: "Video UUID to process"
+        required: true
+
+concurrency:
+  group: video-processing
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330  # under the 360-min hard cap
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: worker/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system ffmpeg (faster than the bundled binary for large files)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install faster-whisper (for fallback transcription)
+        run: pip install --no-cache-dir faster-whisper==1.0.3
+
+      - name: Install worker deps
+        working-directory: worker
+        run: npm ci || npm install
+
+      - name: Run worker
+        working-directory: worker
+        env:
+          VIDEO_ID: ${{ github.event.client_payload.video_id || github.event.inputs.video_id }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_AI_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_AI_TOKEN }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+          TRANSCRIBE_PREFERENCE: ${{ vars.TRANSCRIBE_PREFERENCE || 'groq,cloudflare,local' }}
+          WHISPER_LOCAL_MODEL: ${{ vars.WHISPER_LOCAL_MODEL || 'small' }}
+        run: npm start

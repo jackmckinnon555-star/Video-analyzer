@@ -1,0 +1,22 @@
+{
+  "name": "video-analyzer",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Long-form video auto-analyzer: upload → title + captions + chapter timestamps.",
+  "workspaces": [
+    "web",
+    "worker",
+    "netlify/functions",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "netlify dev",
+    "dev:web": "npm --workspace web run dev",
+    "build": "npm --workspace web run build",
+    "worker:dev": "npm --workspace worker run start",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.netlify/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+/tmp/
+/worker/.tmp/
+coverage/

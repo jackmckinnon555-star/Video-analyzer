@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "outDir": "dist",
+    "noEmit": false,
+    "paths": {
+      "@shared/*": ["../../shared/*"]
+    }
+  },
+  "include": ["./*.ts", "../../shared"]
+}

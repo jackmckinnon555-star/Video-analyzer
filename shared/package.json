@@ -1,0 +1,14 @@
+{
+  "name": "@video-analyzer/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    "./types/*": "./types/*.ts",
+    "./schemas/*": "./schemas/*.ts"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}
