@@ -18,6 +18,7 @@ import {
   saveThumbnailUrl,
   saveLanguage,
   savePreviewPath,
+  setProgress,
   getVideo,
   markFailed,
 } from "./pipeline/persist.js";
@@ -71,7 +72,17 @@ async function main(): Promise<void> {
 
     // 4. Transcribe with per-chunk fallback (Groq → Cloudflare AI → local whisper).
     const audioChunks = await chunkAudio(audioPath, duration, workDir);
-    const { segments, language, coverageRatio } = await transcribeAll(audioChunks, duration);
+    const { segments, language, coverageRatio } = await transcribeAll(
+      audioChunks,
+      duration,
+      (i, total) =>
+        setProgress(videoId, {
+          phase: "transcribing",
+          chunk_index: i,
+          total_chunks: total,
+          message: `Transcribing chunk ${i}/${total}`,
+        }),
+    );
     await saveTranscript(videoId, segments);
     if (language) await saveLanguage(videoId, language);
     log.info("transcript saved", {
@@ -82,7 +93,14 @@ async function main(): Promise<void> {
 
     // 5. Analyze with Gemini Flash (map-reduce).
     await setStatus(videoId, "analyzing");
-    const analysis = await analyzeFull(segments, frames);
+    const analysis = await analyzeFull(segments, frames, (i, total) =>
+      setProgress(videoId, {
+        phase: "analyzing",
+        chunk_index: i,
+        total_chunks: total,
+        message: `Analyzing chunk ${i}/${total}`,
+      }),
+    );
     await saveAnalysis(videoId, analysis);
 
     // 6. Done. We intentionally DO NOT delete the upload — it's the preview.

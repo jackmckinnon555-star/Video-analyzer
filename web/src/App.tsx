@@ -1,11 +1,20 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, Suspense, lazy } from "react";
 import { Routes, Route, Link } from "react-router-dom";
 import PasswordGate from "./pages/PasswordGate";
-import Dashboard from "./pages/Dashboard";
-import VideoResult from "./pages/VideoResult";
 import { getSitePassword, clearSitePassword } from "./lib/sitePassword";
+import { AppLogo } from "./components/AppLogo";
+import { ThemeToggle } from "./components/ThemeToggle";
+import { useTheme } from "./hooks/useTheme";
+
+// Route-split: dashboard + result aren't needed until after unlock.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const VideoResult = lazy(() => import("./pages/VideoResult"));
 
 export default function App() {
+  // Ensure the theme hook mounts at the app root so the html class is applied
+  // even on the password-gate screen.
+  useTheme();
+
   const [unlocked, setUnlocked] = useState<boolean>(() => !!getSitePassword());
   const onUnlock = useCallback(() => setUnlocked(true), []);
   const onLock = useCallback(() => {
@@ -20,10 +29,12 @@ export default function App() {
         {!unlocked ? (
           <PasswordGate onUnlock={onUnlock} />
         ) : (
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/video/:id" element={<VideoResult />} />
-          </Routes>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/video/:id" element={<VideoResult />} />
+            </Routes>
+          </Suspense>
         )}
       </main>
       <BuildFooter />
@@ -31,32 +42,43 @@ export default function App() {
   );
 }
 
-// Stamped at build time so you can confirm which bundle is loaded.
+function Header({ unlocked, onLock }: { unlocked: boolean; onLock: () => void }) {
+  return (
+    <header className="border-b border-neutral-200 bg-white/80 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/80">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-6 py-4">
+        <Link to="/" className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <AppLogo size={28} />
+          <span>Video Analyzer</span>
+        </Link>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          {unlocked && (
+            <button
+              onClick={onLock}
+              className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            >
+              Lock
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function RouteFallback() {
+  return (
+    <div className="mx-auto max-w-3xl px-6 py-10 text-sm text-neutral-500">
+      Loading…
+    </div>
+  );
+}
+
 const BUILD_ID = new Date().toISOString().slice(0, 16).replace("T", " ");
 function BuildFooter() {
   return (
     <footer className="py-3 text-center text-[10px] text-neutral-400 dark:text-neutral-600">
       build {BUILD_ID}
     </footer>
-  );
-}
-
-function Header({ unlocked, onLock }: { unlocked: boolean; onLock: () => void }) {
-  return (
-    <header className="border-b border-neutral-200 bg-white/80 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/80">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link to="/" className="text-lg font-semibold tracking-tight">
-          Video Analyzer
-        </Link>
-        {unlocked && (
-          <button
-            onClick={onLock}
-            className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          >
-            Lock
-          </button>
-        )}
-      </div>
-    </header>
   );
 }

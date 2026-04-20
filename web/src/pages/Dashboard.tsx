@@ -1,6 +1,8 @@
 import { useVideos } from "../hooks/useVideos";
 import { Uploader } from "../components/Uploader";
 import { VideoRow } from "../components/VideoRow";
+import { SkeletonRow } from "../components/SkeletonRow";
+import { AppLogo } from "../components/AppLogo";
 
 export default function Dashboard() {
   const { data: videos, isLoading, error } = useVideos();
@@ -16,22 +18,47 @@ export default function Dashboard() {
         <Uploader />
       </div>
 
-      {isLoading && <div className="text-sm text-neutral-500">Loading…</div>}
+      {isLoading && (
+        <div className="flex flex-col gap-2">
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </div>
+      )}
+
       {error && (
-        <div className="text-sm text-red-600">
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50">
           {error instanceof Error ? error.message : "Failed to load videos"}
         </div>
       )}
 
-      {videos && videos.length === 0 && (
-        <div className="rounded-md border border-neutral-200 bg-neutral-50 p-6 text-center text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900">
-          No videos yet. Upload one above to get started.
+      {videos && videos.length === 0 && <EmptyState />}
+
+      {videos && videos.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {videos.map((v) => <VideoRow key={v.id} video={v} />)}
         </div>
       )}
+    </div>
+  );
+}
 
-      <div className="flex flex-col gap-2">
-        {videos?.map((v) => <VideoRow key={v.id} video={v} />)}
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 rounded-md border border-dashed border-neutral-300 bg-neutral-50 px-6 py-12 text-center dark:border-neutral-700 dark:bg-neutral-900">
+      <AppLogo size={64} />
+      <div className="max-w-sm">
+        <h2 className="text-lg font-semibold">Upload your first video</h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          Best with podcasts, talks, and lectures. Files over 45 MB are
+          compressed in your browser before upload.
+        </p>
       </div>
+      <ul className="mt-1 flex flex-col gap-1 text-xs text-neutral-500">
+        <li>• Processing typically takes 2-5 min for a 10-minute clip.</li>
+        <li>• Transcript, chapters, and highlights are auto-generated.</li>
+        <li>• Preview plays back with clickable timestamps.</li>
+      </ul>
     </div>
   );
 }

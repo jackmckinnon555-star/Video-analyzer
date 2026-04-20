@@ -33,6 +33,7 @@ export interface TranscribeResult {
 export async function transcribeAll(
   chunks: AudioChunk[],
   totalDurationSeconds: number,
+  onProgress?: (chunkIndex: number, totalChunks: number) => Promise<void>,
 ): Promise<TranscribeResult> {
   const pref = getPreference();
   log.info("transcription preference", { pref });
@@ -41,6 +42,7 @@ export async function transcribeAll(
   let detectedLanguage: string | null = null;
 
   for (const [i, chunk] of chunks.entries()) {
+    if (onProgress) await onProgress(i + 1, chunks.length);
     const result = await transcribeOneChunk(chunk, pref, i + 1, chunks.length);
     all.push(...result.segments);
     if (!detectedLanguage && result.language) detectedLanguage = result.language;

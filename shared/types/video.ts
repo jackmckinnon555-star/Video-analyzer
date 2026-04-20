@@ -44,6 +44,14 @@ export interface KeyQuote {
   speaker?: string;
 }
 
+export interface ProgressInfo {
+  phase: "transcribing" | "analyzing" | "embedding" | "finalizing";
+  chunk_index?: number;
+  total_chunks?: number;
+  message?: string;
+  updated_at: string;
+}
+
 export interface Video {
   id: string;
   uploader_name: string | null;
@@ -62,6 +70,7 @@ export interface Video {
   key_quotes: KeyQuote[] | null;
   thumbnail_url: string | null;
   preview_path: string | null;
+  progress: ProgressInfo | null;
   error: string | null;
   dispatched_at: string | null;
   created_at: string;

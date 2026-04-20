@@ -1,6 +1,6 @@
 import { sb } from "../lib/supabase.js";
 import { log } from "../lib/log.js";
-import type { TranscriptSegment, VideoStatus } from "../../../shared/types/video.js";
+import type { TranscriptSegment, VideoStatus, ProgressInfo } from "../../../shared/types/video.js";
 import type { GlobalAnalysis } from "../../../shared/schemas/geminiOutput.js";
 
 export async function setStatus(
@@ -80,4 +80,23 @@ export async function getVideo(videoId: string): Promise<{ storage_path: string;
 
 export async function markFailed(videoId: string, error: string): Promise<void> {
   await sb().from("videos").update({ status: "failed", error }).eq("id", videoId);
+}
+
+/**
+ * Update the fine-grained progress object. Best-effort — a failed progress
+ * update never blocks the real pipeline step.
+ */
+export async function setProgress(
+  videoId: string,
+  progress: Omit<ProgressInfo, "updated_at">,
+): Promise<void> {
+  const payload: ProgressInfo = { ...progress, updated_at: new Date().toISOString() };
+  try {
+    await sb().from("videos").update({ progress: payload }).eq("id", videoId);
+  } catch (err) {
+    log.warn("progress update failed (continuing)", {
+      videoId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }

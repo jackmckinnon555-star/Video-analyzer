@@ -39,15 +39,18 @@ async function transcribeOne(
   token: string,
 ): Promise<ChunkResult> {
   const audio = await readFile(chunk.path);
+  // `@cf/openai/whisper` expects JSON body with `audio: number[]` (byte array).
+  // Raw octet-stream bodies are accepted by some Workers AI models but not
+  // reliably this one; JSON is the documented path.
   const res = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/openai/whisper`,
     {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/octet-stream",
+        "Content-Type": "application/json",
       },
-      body: audio,
+      body: JSON.stringify({ audio: Array.from(audio) }),
     },
   );
   if (!res.ok) {

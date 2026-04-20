@@ -26,6 +26,7 @@ interface TranscriptChunk {
 export async function analyzeFull(
   transcript: TranscriptSegment[],
   frames: SampledFrame[],
+  onProgress?: (chunkIndex: number, totalChunks: number) => Promise<void>,
 ): Promise<GlobalAnalysis> {
   // Guard: empty transcript = no content to analyze. Emit a minimal valid
   // shape so the video row still transitions to 'done' with a clear message.
@@ -46,6 +47,7 @@ export async function analyzeFull(
 
   const mapResults: ChunkAnalysis[] = [];
   for (const [i, chunk] of chunks.entries()) {
+    if (onProgress) await onProgress(i + 1, chunks.length);
     const chunkFrames = frames.filter(
       (f) => f.timestampSeconds >= chunk.startSeconds && f.timestampSeconds <= chunk.endSeconds,
     );

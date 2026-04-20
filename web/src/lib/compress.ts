@@ -1,5 +1,8 @@
-import { FFmpeg } from "@ffmpeg/ffmpeg";
+// Note: @ffmpeg/ffmpeg is dynamically imported inside loadFFmpeg() so its
+// dependency graph never lands in the initial bundle — only users who upload
+// a file >45 MB pay the download cost. @ffmpeg/util is tiny and stays eager.
 import { fetchFile } from "@ffmpeg/util";
+import type { FFmpeg } from "@ffmpeg/ffmpeg";
 
 // Supabase free tier caps uploads at 50 MB. Target 47 MB to leave safety margin
 // for container overhead.
@@ -33,6 +36,8 @@ export interface CompressProgress {
   mode?: "video" | "audio-only";
   targetBitrateKbps?: number;
   durationSeconds?: number;
+  /** Rough seconds remaining, or null if we can't estimate yet. */
+  etaSeconds?: number | null;
   message?: string;
 }
 
@@ -43,7 +48,8 @@ async function loadFFmpeg(onLoad?: () => void): Promise<FFmpeg> {
   if (_ffmpeg) return _ffmpeg;
   if (_loadPromise) return _loadPromise;
   _loadPromise = (async () => {
-    const ffmpeg = new FFmpeg();
+    const { FFmpeg: FFmpegCtor } = await import("@ffmpeg/ffmpeg");
+    const ffmpeg = new FFmpegCtor();
     // Use same-origin URLs for both the core and the SDK's wrapper worker.
     // The SDK spawns `new Worker(classWorkerURL, { type: 'module' })`, which
     // requires same-origin — blob URLs for the module worker hang in some
@@ -121,14 +127,29 @@ export async function compressForUpload(
 
     const outputName = audioOnly ? "output.m4a" : "output.mp4";
 
+    // Rough ETA baseline: ultrafast libx264 runs at ~0.2-0.35x realtime in-browser.
+    // Audio-only is ~4x faster (no video encode).
+    const realtimeFactor = audioOnly ? 1.2 : 0.25;
+    const compressStartedAt = performance.now();
     ffmpeg.on("progress", ({ progress }) => {
+      const p = Math.min(1, progress);
+      // Prefer elapsed-based ETA once we have ≥5% progress; fall back to the
+      // duration × factor heuristic otherwise.
+      let etaSeconds: number | null = null;
+      if (p > 0.05) {
+        const elapsed = (performance.now() - compressStartedAt) / 1000;
+        etaSeconds = Math.max(1, Math.round((elapsed / p) * (1 - p)));
+      } else if (durationSeconds > 0) {
+        etaSeconds = Math.max(1, Math.round(durationSeconds / realtimeFactor));
+      }
       onProgress({
         phase: "compressing",
-        progress: Math.min(1, progress),
-        overallProgress: 0.15 + Math.min(1, progress) * 0.8,
+        progress: p,
+        overallProgress: 0.15 + p * 0.8,
         mode: audioOnly ? "audio-only" : "video",
         targetBitrateKbps: audioOnly ? AUDIO_BITRATE_KBPS : videoBitrateKbps + AUDIO_BITRATE_KBPS,
         durationSeconds,
+        etaSeconds,
       });
     });
 

@@ -19,10 +19,12 @@ export default async (req: Request): Promise<Response> => {
       .single();
     if (error || !data) throw httpError(404, "Not found");
 
-    const paths: string[] = [];
-    if (data.storage_path && data.storage_path !== "pending") paths.push(data.storage_path);
-    if (data.preview_path) paths.push(data.preview_path);
-    await removeObjects(paths);
+    // preview_path and storage_path are the same object after the worker
+    // simplification, so dedupe before calling remove.
+    const pathSet = new Set<string>();
+    if (data.storage_path && data.storage_path !== "pending") pathSet.add(data.storage_path);
+    if (data.preview_path) pathSet.add(data.preview_path);
+    await removeObjects([...pathSet]);
 
     const { error: delErr } = await adminClient().from("videos").delete().eq("id", videoId);
     if (delErr) throw httpError(500, delErr.message);

@@ -2,6 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useRef, useState } from "react";
 import { useVideo } from "../hooks/useVideos";
 import { usePreviewUrl } from "../hooks/usePreviewUrl";
+import { useVideoKeyboard } from "../hooks/useVideoKeyboard";
 import { ChapterList } from "../components/ChapterList";
 import { TranscriptViewer } from "../components/TranscriptViewer";
 import { CaptionDownloads } from "../components/CaptionDownloads";
@@ -19,6 +20,8 @@ export default function VideoResult() {
   );
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const [busy, setBusy] = useState<"delete" | "retry" | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  useVideoKeyboard(playerRef, () => setHelpOpen((v) => !v));
 
   function jump(seconds: number) {
     if (!playerRef.current) return;
@@ -139,6 +142,24 @@ export default function VideoResult() {
       ) : null}
       {previewError && (
         <div className="mt-2 text-xs text-red-600">Preview error: {previewError}</div>
+      )}
+
+      {previewUrl && (
+        <div className="mt-2 flex items-center gap-3 text-xs text-neutral-500">
+          <button
+            onClick={() => setHelpOpen((v) => !v)}
+            className="rounded border border-neutral-300 px-2 py-0.5 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            aria-expanded={helpOpen}
+            aria-label="Toggle keyboard shortcuts"
+          >
+            ? keyboard shortcuts
+          </button>
+          {helpOpen && (
+            <span className="font-mono text-[11px]">
+              Space/K play · ← → ±5s · Shift+arrow ±30s · J/L ±10s · , . step frame · &lt;&gt; speed · M mute · F fullscreen
+            </span>
+          )}
+        </div>
       )}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <rect width="1200" height="630" fill="#0B2A4A"/>
+  <!-- Large TRA play logo mark, left side -->
+  <g transform="translate(120 180)">
+    <rect width="270" height="270" rx="48" fill="#102F52"/>
+    <path d="M98 70 L210 135 L98 200 Z" fill="#C7A35A"/>
+    <text x="135" y="245" text-anchor="middle" font-family="'Inter', system-ui, sans-serif" font-weight="700" font-size="42" letter-spacing="6" fill="#F6F4EF">TRA</text>
+  </g>
+  <!-- Right side copy -->
+  <g transform="translate(470 220)">
+    <text x="0" y="0" font-family="'Inter', system-ui, sans-serif" font-weight="700" font-size="64" fill="#F6F4EF">Video Analyzer</text>
+    <text x="0" y="70" font-family="'Inter', system-ui, sans-serif" font-weight="500" font-size="28" fill="#C7A35A">Upload. Transcribe. Discover chapters.</text>
+    <text x="0" y="140" font-family="'Inter', system-ui, sans-serif" font-weight="400" font-size="22" fill="#E3DED6">AI-generated titles, captions, and timestamps for long-form video.</text>
+  </g>
+</svg>

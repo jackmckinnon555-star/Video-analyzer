@@ -76,9 +76,10 @@ function StatusLine({ state }: { state: UploadState }) {
     if (c.phase === "compressing") {
       const dur = c.durationSeconds ? ` · ${Math.round(c.durationSeconds / 60)} min source` : "";
       const br = c.targetBitrateKbps ? ` @ ${c.targetBitrateKbps} kbps` : "";
+      const eta = c.etaSeconds != null ? ` · ~${formatEta(c.etaSeconds)} left` : "";
       return (
         <>
-          Compressing ({c.mode ?? "video"}{br}){dur} · {Math.round(c.progress * 100)}%
+          Compressing ({c.mode ?? "video"}{br}){dur} · {Math.round(c.progress * 100)}%{eta}
         </>
       );
     }
@@ -96,6 +97,16 @@ function StatusLine({ state }: { state: UploadState }) {
     return <span className="text-emerald-600">Queued. Processing will start shortly.</span>;
   if (state.phase === "error") return <span className="text-red-600">Error: {state.error}</span>;
   return null;
+}
+
+function formatEta(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${h}h ${mm}m`;
 }
 
 function ProgressBar({ phase, progress }: { phase: UploadState["phase"]; progress: number }) {

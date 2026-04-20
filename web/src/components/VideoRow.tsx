@@ -14,7 +14,6 @@ export function VideoRow({ video }: { video: Video }) {
     setBusy("delete");
     try {
       await api.deleteVideo(video.id);
-      // Realtime subscription will drop the row automatically.
     } catch (err) {
       alert(err instanceof Error ? err.message : "Delete failed");
       setBusy(null);
@@ -34,6 +33,16 @@ export function VideoRow({ video }: { video: Video }) {
     }
   }
 
+  const progressMessage =
+    video.progress?.message ??
+    (video.progress?.total_chunks != null && video.progress?.chunk_index != null
+      ? `${video.progress.phase} · chunk ${video.progress.chunk_index}/${video.progress.total_chunks}`
+      : null);
+  const progressFraction =
+    video.progress?.total_chunks && video.progress?.chunk_index
+      ? Math.min(1, video.progress.chunk_index / video.progress.total_chunks)
+      : null;
+
   return (
     <Link
       to={`/video/${video.id}`}
@@ -43,11 +52,25 @@ export function VideoRow({ video }: { video: Video }) {
         <div className="truncate font-medium">
           {video.title || video.filename}
         </div>
-        <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
+        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
           <StatusBadge status={video.status} />
           <span>{formatBytes(video.size_bytes)}</span>
           <span>{new Date(video.created_at).toLocaleString()}</span>
+          {video.detected_language && (
+            <span className="uppercase">{video.detected_language}</span>
+          )}
         </div>
+        {progressMessage && video.status !== "done" && video.status !== "failed" && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="h-1 w-40 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+              <div
+                className="h-full animate-pulse bg-neutral-900 transition-[width] duration-300 dark:bg-white"
+                style={{ width: `${Math.max(8, (progressFraction ?? 0.1) * 100)}%` }}
+              />
+            </div>
+            <span className="text-[11px] text-neutral-500">{progressMessage}</span>
+          </div>
+        )}
         {video.error && (
           <div className="mt-1 text-xs text-red-600">{video.error}</div>
         )}
@@ -58,6 +81,7 @@ export function VideoRow({ video }: { video: Video }) {
             onClick={onRetry}
             disabled={busy === "retry"}
             className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            aria-label="Retry processing this video"
           >
             {busy === "retry" ? "…" : "Retry"}
           </button>
@@ -66,6 +90,7 @@ export function VideoRow({ video }: { video: Video }) {
           onClick={onDelete}
           disabled={busy === "delete"}
           className="rounded border border-transparent px-2 py-1 text-xs text-neutral-500 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:hover:border-red-900 dark:hover:bg-red-950/50 dark:hover:text-red-400"
+          aria-label="Delete this video"
         >
           {busy === "delete" ? "…" : "×"}
         </button>
@@ -84,7 +109,11 @@ function StatusBadge({ status }: { status: Video["status"] }) {
     failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
   };
   return (
-    <span className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${color[status]}`}>
+    <span
+      role="status"
+      aria-live="polite"
+      className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${color[status]}`}
+    >
       {status}
     </span>
   );
