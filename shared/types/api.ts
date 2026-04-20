@@ -7,8 +7,12 @@ export interface PresignUploadRequest {
 
 export interface PresignUploadResponse {
   videoId: string;
-  uploadUrl: string;
-  r2Key: string;
+  /** Storage bucket (always "videos" today but returned for forward-compat). */
+  bucket: string;
+  /** Object path within the bucket (e.g. `uploads/<uuid>/<filename>`). */
+  path: string;
+  /** Short-lived upload token. Pair with `path` in supabase-js `uploadToSignedUrl`. */
+  token: string;
   expiresInSeconds: number;
 }
 
@@ -18,7 +22,9 @@ export interface FinalizeUploadRequest {
 
 export interface FinalizeUploadResponse {
   ok: true;
-  status: "queued";
+  status: "queued" | "dispatch_failed";
+  /** Populated if the row was queued but GHA dispatch failed. */
+  warning?: string;
 }
 
 export interface ApiError {

@@ -69,6 +69,7 @@ async function transcribeOneChunk(
   total: number,
 ): Promise<ChunkResult> {
   let lastErr: unknown;
+  let emptyFallback: ChunkResult | null = null;
   for (const backend of pref) {
     const fn = BACKENDS[backend];
     if (!fn) {
@@ -79,7 +80,9 @@ async function transcribeOneChunk(
       log.info("transcribing chunk", { index, total, backend });
       const result = await fn(chunk);
       if (result.segments.length === 0 && chunk.durationSeconds > 5) {
-        // Empty transcript for a non-trivial chunk is suspicious; try next backend.
+        // Suspicious empty transcript — try the next backend but remember
+        // this result so we can fall back to empty if every backend agrees.
+        emptyFallback = result;
         throw new Error("empty transcript for non-trivial chunk");
       }
       return result;
@@ -91,6 +94,13 @@ async function transcribeOneChunk(
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+  // All backends either returned empty or errored. If at least one returned
+  // a well-formed empty result, the chunk is probably genuinely silent —
+  // accept it rather than failing the entire job.
+  if (emptyFallback) {
+    log.warn("all backends returned empty — accepting silent chunk", { index });
+    return emptyFallback;
   }
   throw lastErr ?? new Error(`All backends failed for chunk ${index}`);
 }

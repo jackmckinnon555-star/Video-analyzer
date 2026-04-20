@@ -9,3 +9,12 @@ dist/
 /tmp/
 /worker/.tmp/
 coverage/
+# Debug / diagnostic artifacts
+.gha*.json
+.gha*.zip
+.flow-*.cjs
+.deploy-*.cjs
+.secrets-*.cjs
+.t.json
+.d.json
+.env.json

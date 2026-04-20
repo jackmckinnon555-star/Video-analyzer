@@ -11,7 +11,12 @@ export const COMPRESS_THRESHOLD_BYTES = 45 * 1024 * 1024;
 
 const AUDIO_BITRATE_KBPS = 32;
 const MIN_VIDEO_BITRATE_KBPS = 100;
-const FFMPEG_CORE_VERSION = "0.12.10";
+// Self-hosted at /public/ffmpeg/ — same-origin. Copied from node_modules by
+// the prebuild step. Avoids cross-origin Worker construction and importScripts
+// CORS issues that hit every CDN-based approach in @ffmpeg/ffmpeg@0.12.15.
+const CORE_JS = "/ffmpeg/ffmpeg-core.js";
+const CORE_WASM = "/ffmpeg/ffmpeg-core.wasm";
+const CLASS_WORKER_JS = "/ffmpeg/worker.js";
 
 export type CompressPhase =
   | "idle"
@@ -39,9 +44,14 @@ async function loadFFmpeg(onLoad?: () => void): Promise<FFmpeg> {
   if (_loadPromise) return _loadPromise;
   _loadPromise = (async () => {
     const ffmpeg = new FFmpeg();
+    // Use same-origin URLs for both the core and the SDK's wrapper worker.
+    // The SDK spawns `new Worker(classWorkerURL, { type: 'module' })`, which
+    // requires same-origin — blob URLs for the module worker hang in some
+    // browsers. Plain absolute paths under /ffmpeg/ are bulletproof.
     await ffmpeg.load({
-      coreURL: `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd/ffmpeg-core.js`,
-      wasmURL: `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd/ffmpeg-core.wasm`,
+      coreURL: CORE_JS,
+      wasmURL: CORE_WASM,
+      classWorkerURL: CLASS_WORKER_JS,
     });
     _ffmpeg = ffmpeg;
     onLoad?.();

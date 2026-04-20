@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../lib/api";
+import { supabase } from "../lib/supabase";
 import {
   compressForUpload,
   COMPRESS_THRESHOLD_BYTES,
@@ -18,7 +19,7 @@ export type UploadPhase =
 
 export interface UploadState {
   phase: UploadPhase;
-  progress: number; // 0..1 for the current phase
+  progress: number;
   compress: CompressProgress | null;
   originalSizeBytes: number | null;
   finalSizeBytes: number | null;
@@ -42,11 +43,12 @@ export function useUpload() {
   async function upload(file: File) {
     setState({ ...initial, originalSizeBytes: file.size });
 
+    let phaseLabel: "compress" | "presign" | "upload" | "finalize" = "compress";
     try {
       let toUpload = file;
 
-      // Compress if the raw file is larger than the upload cap.
       if (file.size > COMPRESS_THRESHOLD_BYTES) {
+        phaseLabel = "compress";
         setState((s) => ({ ...s, phase: "compressing" }));
         toUpload = await compressForUpload(file, (cp) => {
           setState((s) => ({ ...s, compress: cp, progress: cp.overallProgress }));
@@ -59,32 +61,57 @@ export function useUpload() {
         );
       }
 
-      setState((s) => ({
-        ...s,
-        phase: "presigning",
-        progress: 0,
-        finalSizeBytes: toUpload.size,
-      }));
-      const { uploadUrl, videoId } = await api.presignUpload({
+      // 1. Presign
+      phaseLabel = "presign";
+      setState((s) => ({ ...s, phase: "presigning", progress: 0, finalSizeBytes: toUpload.size }));
+      const presign = await api.presignUpload({
         filename: toUpload.name,
         contentType: toUpload.type || "application/octet-stream",
         sizeBytes: toUpload.size,
       });
 
-      setState((s) => ({ ...s, phase: "uploading", videoId, progress: 0 }));
-      await putWithProgress(uploadUrl, toUpload, (p) =>
-        setState((s) => ({ ...s, progress: p })),
-      );
+      // 2. Upload via Supabase JS client — the officially supported client-side path.
+      phaseLabel = "upload";
+      setState((s) => ({ ...s, phase: "uploading", videoId: presign.videoId, progress: 0 }));
+      const { error: upErr } = await supabase.storage
+        .from(presign.bucket)
+        .uploadToSignedUrl(presign.path, presign.token, toUpload, {
+          contentType: toUpload.type || "application/octet-stream",
+          upsert: true,
+        });
+      if (upErr) {
+        throw new Error(
+          `Storage upload failed: ${upErr.message ?? JSON.stringify(upErr)}`,
+        );
+      }
+      setState((s) => ({ ...s, progress: 1 }));
 
+      // 3. Finalize
+      phaseLabel = "finalize";
       setState((s) => ({ ...s, phase: "finalizing", progress: 1 }));
-      await api.finalizeUpload({ videoId });
+      const fin = await api.finalizeUpload({ videoId: presign.videoId });
       setState((s) => ({ ...s, phase: "done", progress: 1 }));
-      return videoId;
+
+      // Surface dispatch warning (stored but not processing) without failing the upload
+      if (fin.status === "dispatch_failed" && fin.warning) {
+        console.warn("[upload] stored but dispatch failed:", fin.warning);
+      }
+      return presign.videoId;
     } catch (err) {
+      console.error(`[upload] ${phaseLabel} failed:`, err);
+      let message: string;
+      if (err instanceof Error) {
+        message = err.message || err.toString();
+      } else if (typeof err === "string") {
+        message = err;
+      } else {
+        try { message = JSON.stringify(err); } catch { message = String(err); }
+      }
+      if (!message) message = "Unknown error — check browser console";
       setState((s) => ({
         ...s,
         phase: "error",
-        error: err instanceof Error ? err.message : "Upload failed",
+        error: `[${phaseLabel}] ${message}`,
       }));
       throw err;
     }
@@ -95,26 +122,4 @@ export function useUpload() {
   }
 
   return { state, upload, reset };
-}
-
-function putWithProgress(
-  url: string,
-  file: File,
-  onProgress: (p: number) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-    xhr.setRequestHeader("x-upsert", "true");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(e.loaded / e.total);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText} — ${xhr.responseText.slice(0, 200)}`));
-    };
-    xhr.onerror = () => reject(new Error("Network error during upload"));
-    xhr.send(file);
-  });
 }

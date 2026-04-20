@@ -10,7 +10,6 @@ import { extractFrames } from "./pipeline/extractFrames.js";
 import { transcribeAll, assertAudioHasContent } from "./pipeline/transcribe.js";
 import { analyzeFull } from "./pipeline/analyzeGemini.js";
 import { pickThumbnailDataUrl } from "./pipeline/thumbnail.js";
-import { buildPreview } from "./pipeline/preview.js";
 import {
   setStatus,
   setDuration,
@@ -22,7 +21,7 @@ import {
   getVideo,
   markFailed,
 } from "./pipeline/persist.js";
-import { cleanupRawStorage, cleanupWorkDir } from "./pipeline/cleanup.js";
+import { cleanupWorkDir } from "./pipeline/cleanup.js";
 
 async function main(): Promise<void> {
   const videoId = env("VIDEO_ID");
@@ -35,10 +34,16 @@ async function main(): Promise<void> {
   try {
     await setStatus(videoId, "transcribing");
 
-    // 1. Download the raw video from Supabase Storage.
+    // The client-side ffmpeg.wasm compressor already pre-shrinks every upload
+    // to <=50 MB, so the uploaded file IS the playable preview. No server-side
+    // transcode needed; set the preview path up front so the UI can play back
+    // even mid-processing.
+    await savePreviewPath(videoId, row.storage_path);
+
+    // 1. Download the uploaded video/audio from Supabase Storage.
     const videoPath = await downloadVideo(row.storage_path, workDir);
 
-    // 2. Probe duration (used for chunking & saved to the DB).
+    // 2. Probe duration.
     const duration = (await probeDurationSeconds(videoPath)) ?? 0;
     if (duration > 0) await setDuration(videoId, duration);
     log.info("duration probed", { duration });
@@ -49,28 +54,22 @@ async function main(): Promise<void> {
       extractFrames(videoPath, workDir, framesIntervalSeconds(duration)),
     ]);
 
-    // Fail clearly if the video had no real audio track.
+    // Guard: if the file has no audio, transcription will never succeed —
+    // fail fast with a clear message.
     await assertAudioHasContent(audioPath);
 
-    // Thumbnail and preview are best-effort background tasks that run in
-    // parallel with transcription. A failure in either never blocks analysis.
-    pickThumbnailDataUrl(frames)
-      .then((url) => (url ? saveThumbnailUrl(videoId, url) : null))
-      .catch((err) =>
-        log.warn("thumbnail step failed (continuing)", {
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    const previewPromise = buildPreview(videoId, videoPath)
-      .then((p) => savePreviewPath(videoId, p).then(() => p))
-      .catch((err) => {
-        log.warn("preview build failed (continuing)", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-        return null;
-      });
+    // Best-effort thumbnail (audio-only files produce zero frames → skipped).
+    if (frames.length > 0) {
+      pickThumbnailDataUrl(frames)
+        .then((url) => (url ? saveThumbnailUrl(videoId, url) : null))
+        .catch((err) =>
+          log.warn("thumbnail step failed (continuing)", {
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+    }
 
-    // 4. Chunk audio and transcribe every chunk with per-chunk fallback.
+    // 4. Transcribe with per-chunk fallback (Groq → Cloudflare AI → local whisper).
     const audioChunks = await chunkAudio(audioPath, duration, workDir);
     const { segments, language, coverageRatio } = await transcribeAll(audioChunks, duration);
     await saveTranscript(videoId, segments);
@@ -86,12 +85,9 @@ async function main(): Promise<void> {
     const analysis = await analyzeFull(segments, frames);
     await saveAnalysis(videoId, analysis);
 
-    // 6. Make sure the preview transcode finished before we touch storage.
-    await previewPromise;
-
-    // 7. Done. Delete the raw to free storage quota (preview stays).
+    // 6. Done. We intentionally DO NOT delete the upload — it's the preview.
+    // Storage cleanup happens when the user clicks "Delete" on the dashboard.
     await setStatus(videoId, "done");
-    await cleanupRawStorage(row.storage_path);
     log.info("worker done", { videoId, title: analysis.title });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

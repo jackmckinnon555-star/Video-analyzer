@@ -26,7 +26,18 @@ export default function App() {
           </Routes>
         )}
       </main>
+      <BuildFooter />
     </div>
+  );
+}
+
+// Stamped at build time so you can confirm which bundle is loaded.
+const BUILD_ID = new Date().toISOString().slice(0, 16).replace("T", " ");
+function BuildFooter() {
+  return (
+    <footer className="py-3 text-center text-[10px] text-neutral-400 dark:text-neutral-600">
+      build {BUILD_ID}
+    </footer>
   );
 }
 

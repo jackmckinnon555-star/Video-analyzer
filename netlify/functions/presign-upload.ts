@@ -1,16 +1,16 @@
 import { z } from "zod";
 import { verifySitePassword, adminClient, jsonResponse, errorResponse, httpError } from "./_auth.js";
-import { buildStoragePath, createUploadUrl } from "./_storage.js";
+import { buildStoragePath, createUploadToken, BUCKET } from "./_storage.js";
 import type { PresignUploadResponse } from "../../shared/types/api.js";
 
 const BodySchema = z.object({
   filename: z.string().min(1).max(200),
   contentType: z.string().min(3).max(100),
-  sizeBytes: z.number().int().positive().max(5 * 1024 * 1024 * 1024), // 5 GB (Supabase bucket cap)
+  sizeBytes: z.number().int().positive().max(5 * 1024 * 1024 * 1024),
   uploaderName: z.string().max(80).optional(),
 });
 
-const EXPIRES = 2 * 60 * 60; // 2 hours — long enough for a slow GB-scale upload
+const EXPIRES = 2 * 60 * 60;
 
 export default async (req: Request): Promise<Response> => {
   try {
@@ -32,14 +32,15 @@ export default async (req: Request): Promise<Response> => {
     if (error || !row) throw httpError(500, `DB insert failed: ${error?.message}`);
 
     const storagePath = buildStoragePath(row.id, body.filename);
-    const uploadUrl = await createUploadUrl(storagePath);
+    const { path, token } = await createUploadToken(storagePath);
 
     await adminClient().from("videos").update({ storage_path: storagePath }).eq("id", row.id);
 
     const res: PresignUploadResponse = {
       videoId: row.id,
-      uploadUrl,
-      r2Key: storagePath, // API compat: same field name on the response
+      bucket: BUCKET,
+      path,
+      token,
       expiresInSeconds: EXPIRES,
     };
     return jsonResponse(200, res);

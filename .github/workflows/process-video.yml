@@ -21,24 +21,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # npm workspaces hoist the lockfile to the repo root; cache the root one.
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: worker/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install system ffmpeg (faster than the bundled binary for large files)
+      - name: Install system ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Install faster-whisper (for fallback transcription)
+      - name: Install faster-whisper (fallback transcription)
         run: pip install --no-cache-dir faster-whisper==1.0.3
 
-      - name: Install worker deps
-        working-directory: worker
+      # Install at the root so npm workspaces resolves shared/ correctly.
+      - name: Install deps (root workspaces)
         run: npm ci || npm install
 
       - name: Run worker

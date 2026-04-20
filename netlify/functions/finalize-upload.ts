@@ -12,7 +12,7 @@ export default async (req: Request): Promise<Response> => {
     verifySitePassword(req);
     const { videoId } = BodySchema.parse(await req.json());
 
-    // Atomic status transition: only flip pending -> queued once.
+    // Atomic status transition: pending -> queued, once.
     const { data, error } = await adminClient()
       .from("videos")
       .update({ status: "queued", dispatched_at: new Date().toISOString() })
@@ -25,7 +25,22 @@ export default async (req: Request): Promise<Response> => {
       throw httpError(409, "Video not found or already queued");
     }
 
-    await dispatchWorker(videoId);
+    // Dispatch to the worker. If dispatch fails (GitHub outage, token issue),
+    // the file is still safely in storage — don't bubble up as a user-facing
+    // upload failure. Mark the row so it's retryable and surface a warning.
+    const dispatchError = await dispatchWorker(videoId);
+    if (dispatchError) {
+      await adminClient()
+        .from("videos")
+        .update({ status: "failed", error: `dispatch: ${dispatchError}` })
+        .eq("id", videoId);
+      const res: FinalizeUploadResponse = {
+        ok: true,
+        status: "dispatch_failed",
+        warning: dispatchError,
+      };
+      return jsonResponse(200, res);
+    }
 
     const res: FinalizeUploadResponse = { ok: true, status: "queued" };
     return jsonResponse(200, res);
@@ -34,28 +49,33 @@ export default async (req: Request): Promise<Response> => {
   }
 };
 
-async function dispatchWorker(videoId: string): Promise<void> {
+async function dispatchWorker(videoId: string): Promise<string | null> {
   const token = process.env.GITHUB_DISPATCH_TOKEN;
   const repo = process.env.GITHUB_REPO;
   if (!token || !repo) {
-    console.warn("[finalize] No GITHUB_DISPATCH_TOKEN/GITHUB_REPO; skipping worker dispatch");
-    return;
+    console.warn("[finalize] No GITHUB_DISPATCH_TOKEN/GITHUB_REPO; skipping dispatch");
+    return "GitHub dispatch not configured";
   }
-  const r = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
-    method: "POST",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      event_type: "process-video",
-      client_payload: { video_id: videoId },
-    }),
-  });
-  if (r.status !== 204) {
-    const txt = await r.text().catch(() => "");
-    throw httpError(502, `GitHub dispatch failed: ${r.status} ${txt}`);
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        event_type: "process-video",
+        client_payload: { video_id: videoId },
+      }),
+    });
+    if (r.status !== 204) {
+      const txt = await r.text().catch(() => "");
+      return `GitHub dispatch ${r.status}: ${txt.slice(0, 200)}`;
+    }
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
   }
 }

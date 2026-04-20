@@ -8,16 +8,20 @@ export function buildStoragePath(videoId: string, filename: string): string {
 }
 
 /**
- * Create a signed URL the browser can PUT an upload directly to. The token
- * is scoped to one object path and a short TTL (default 2 hours — enough
- * even for multi-GB uploads on a modest connection).
+ * Issue a signed upload token scoped to one object path. The browser combines
+ * path + token with the Supabase JS client via
+ * `supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, file)`, which
+ * handles the HTTP method, headers, and CORS correctly — more robust than a
+ * hand-rolled XHR PUT to the raw URL.
  */
-export async function createUploadUrl(storagePath: string): Promise<string> {
+export async function createUploadToken(
+  storagePath: string,
+): Promise<{ path: string; token: string }> {
   const { data, error } = await adminClient()
     .storage.from(BUCKET)
     .createSignedUploadUrl(storagePath, { upsert: true });
   if (error || !data) throw new Error(`Signed upload URL failed: ${error?.message}`);
-  return data.signedUrl;
+  return { path: data.path, token: data.token };
 }
 
 /** Short-lived signed GET URL for the browser <video> element. */

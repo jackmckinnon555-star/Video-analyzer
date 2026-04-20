@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "npm run prebuild && vite",
+    "prebuild": "node ./scripts/copy-ffmpeg.cjs",
+    "build": "npm run prebuild && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ffmpeg/core": "^0.12.9",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@supabase/supabase-js": "^2.45.4",

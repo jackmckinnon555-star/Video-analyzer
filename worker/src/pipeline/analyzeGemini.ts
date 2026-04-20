@@ -27,6 +27,20 @@ export async function analyzeFull(
   transcript: TranscriptSegment[],
   frames: SampledFrame[],
 ): Promise<GlobalAnalysis> {
+  // Guard: empty transcript = no content to analyze. Emit a minimal valid
+  // shape so the video row still transitions to 'done' with a clear message.
+  if (transcript.length === 0) {
+    log.warn("analysis: empty transcript — emitting placeholder result");
+    return {
+      title: "Untitled (no speech detected)",
+      chapters: [],
+      highlights: [],
+      entities: [],
+      keywords: [],
+      key_quotes: [],
+    };
+  }
+
   const chunks = splitTranscript(transcript);
   log.info("analysis: map phase", { chunkCount: chunks.length });
 
@@ -47,6 +61,21 @@ export async function analyzeFull(
       { label: `gemini map ${i}`, attempts: 3, baseMs: 4000 },
     );
     mapResults.push(result);
+  }
+
+  // Single-chunk shortcut: skip the reduce call (it's redundant), upgrade the
+  // map result directly. Saves one Gemini request for short videos.
+  if (mapResults.length === 1) {
+    const only = mapResults[0]!;
+    log.info("analysis: single-chunk shortcut — promoting map result");
+    return {
+      title: only.chapter_candidates[0]?.title ?? only.chunk_summary.slice(0, 80),
+      chapters: only.chapter_candidates.slice(0, 12),
+      highlights: only.highlight_candidates.slice(0, 10),
+      entities: only.entities,
+      keywords: only.keywords.slice(0, 30),
+      key_quotes: only.key_quotes.slice(0, 15),
+    };
   }
 
   log.info("analysis: reduce phase");
