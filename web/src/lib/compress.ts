@@ -126,7 +126,8 @@ export async function compressForUpload(
 ): Promise<File> {
   if (file.size > INPUT_HARD_CAP_BYTES) {
     throw new Error(
-      `File is ${(file.size / 1024 / 1024 / 1024).toFixed(2)} GB — the in-browser compressor can't safely handle files over 2 GB. Pre-compress with HandBrake, ffmpeg, or similar and try again.`,
+      `File is ${(file.size / 1024 / 1024 / 1024).toFixed(2)} GB — the in-browser compressor can't safely handle files over 2 GB. ` +
+        `Pre-compress locally first (takes 30-90 s for a 3-hour video): download the script at /compress-tool/`,
     );
   }
 

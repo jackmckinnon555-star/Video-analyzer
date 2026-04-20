@@ -43,7 +43,15 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
         {busy ? "Working…" : "Upload a video"}
       </button>
       <p className="mt-2 text-xs text-neutral-500">
-        Files over 45 MB are compressed in your browser before upload (supports long videos).
+        Files over 45 MB are compressed in your browser before upload.{" "}
+        <a
+          href="/compress-tool/"
+          target="_blank"
+          rel="noopener"
+          className="underline underline-offset-2 hover:text-neutral-800 dark:hover:text-neutral-200"
+        >
+          Over 2 GB? Compress locally first →
+        </a>
       </p>
 
       {state.phase !== "idle" && (
@@ -99,7 +107,28 @@ function StatusLine({ state }: { state: UploadState }) {
   if (state.phase === "finalizing") return <>Queuing for processing…</>;
   if (state.phase === "done")
     return <span className="text-emerald-600">Queued. Processing will start shortly.</span>;
-  if (state.phase === "error") return <span className="text-red-600">Error: {state.error}</span>;
+  if (state.phase === "error") {
+    const msg = state.error ?? "";
+    // Turn the compress-tool URL mention into a real clickable link.
+    const tool = msg.match(/\/compress-tool\/?/);
+    if (tool) {
+      const before = msg.slice(0, tool.index!);
+      return (
+        <span className="text-red-600">
+          Error: {before}
+          <a
+            href="/compress-tool/"
+            target="_blank"
+            rel="noopener"
+            className="underline underline-offset-2"
+          >
+            open the compression tool →
+          </a>
+        </span>
+      );
+    }
+    return <span className="text-red-600">Error: {msg}</span>;
+  }
   return null;
 }
 
