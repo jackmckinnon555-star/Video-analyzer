@@ -10,7 +10,6 @@ import {
 
 export type UploadPhase =
   | "idle"
-  | "estimating"  // reading file metadata before starting
   | "compressing"
   | "presigning"
   | "uploading"
@@ -54,7 +53,13 @@ export function useUpload() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setState({ ...initial, originalSizeBytes: file.size, file, phase: "estimating" });
+    // For files over the threshold, go straight into compressing. Showing an
+    // "estimating" state tempted us to probe metadata on the main thread,
+    // which froze the tab for multi-GB files. ffmpeg now handles all
+    // metadata detection inside its worker.
+    const startPhase: UploadPhase =
+      file.size > COMPRESS_THRESHOLD ? "compressing" : "presigning";
+    setState({ ...initial, originalSizeBytes: file.size, file, phase: startPhase });
 
     let phaseLabel: "compress" | "presign" | "upload" | "finalize" = "compress";
     try {
@@ -62,7 +67,6 @@ export function useUpload() {
 
       if (file.size > COMPRESS_THRESHOLD) {
         phaseLabel = "compress";
-        setState((s) => ({ ...s, phase: "compressing" }));
         toUpload = await compressStreaming(
           file,
           (cp) => setState((s) => ({ ...s, compress: cp, progress: cp.overallProgress })),

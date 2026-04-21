@@ -213,19 +213,26 @@ export default function Compress() {
 }
 
 function StatusLine({ p }: { p: StreamProgress }) {
-  if (p.phase === "loading") return <span className="text-sm">Loading compressor…</span>;
-  if (p.phase === "reading") return <span className="text-sm">Reading metadata…</span>;
+  if (p.phase === "loading") return <span className="text-sm">Getting the compressor ready…</span>;
   if (p.phase === "mounting")
-    return <span className="text-sm">{p.message ?? "Mounting file (streaming)…"}</span>;
+    return <span className="text-sm">{p.message ?? "Getting your file ready…"}</span>;
+  if (p.phase === "analyzing")
+    return (
+      <div className="text-sm">
+        <div>Analyzing your video…</div>
+        {p.message && (
+          <div className="truncate font-mono text-[10px] text-neutral-400">{p.message}</div>
+        )}
+      </div>
+    );
   if (p.phase === "finalizing")
-    return <span className="text-sm">{p.message ?? "Finalizing…"}</span>;
+    return <span className="text-sm">{p.message ?? "Packaging the result…"}</span>;
   if (p.phase === "compressing") {
     const dur = p.durationSeconds ? ` · ${Math.round(p.durationSeconds / 60)} min source` : "";
-    const br = p.targetBitrateKbps ? ` @ ${p.targetBitrateKbps} kbps` : "";
-    const eta = p.etaSeconds != null ? ` · ~${formatEta(p.etaSeconds)} left` : "";
+    const eta = p.etaSeconds != null ? ` · about ${formatEta(p.etaSeconds)} left` : "";
     return (
       <span className="text-sm">
-        Compressing ({p.mode}{br}){dur} · {Math.round(p.progress * 100)}%{eta}
+        Shrinking your {p.mode === "audio-only" ? "audio" : "video"}{dur} · {Math.round(p.progress * 100)}%{eta}
       </span>
     );
   }

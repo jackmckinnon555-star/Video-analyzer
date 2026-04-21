@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useUpload, type UploadState } from "../hooks/useUpload";
-import { estimateCompression, type Estimate } from "../lib/compressStreaming";
 import { formatBytes } from "../lib/format";
 
 const SUPPORTED_EXT = new Set([
@@ -12,27 +11,6 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
   const { state, upload, cancel, reset } = useUpload();
   const inputRef = useRef<HTMLInputElement>(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [estimate, setEstimate] = useState<Estimate | null>(null);
-  const [estError, setEstError] = useState<string | null>(null);
-
-  // When a new file arrives (state.file set) and we haven't started compressing
-  // yet, pre-compute the estimate.
-  useEffect(() => {
-    setEstimate(null);
-    setEstError(null);
-    if (!state.file || state.phase !== "estimating") return;
-    let cancelled = false;
-    estimateCompression(state.file)
-      .then((e) => {
-        if (!cancelled) setEstimate(e);
-      })
-      .catch((err) => {
-        if (!cancelled) setEstError(err instanceof Error ? err.message : "Couldn't read file");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [state.file, state.phase]);
 
   async function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -48,7 +26,6 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
   }
 
   const busy =
-    state.phase === "estimating" ||
     state.phase === "compressing" ||
     state.phase === "presigning" ||
     state.phase === "uploading" ||
@@ -68,8 +45,6 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
       {showActive && (
         <ActiveView
           state={state}
-          estimate={estimate}
-          estError={estError}
           onCancel={cancel}
           onReset={reset}
         />
@@ -152,18 +127,14 @@ function IdleView({
   );
 }
 
-// ─── Active states (estimate / compress / upload / done / error) ───────────
+// ─── Active states ─────────────────────────────────────────────────────────
 
 function ActiveView({
   state,
-  estimate,
-  estError,
   onCancel,
   onReset,
 }: {
   state: UploadState;
-  estimate: Estimate | null;
-  estError: string | null;
   onCancel: () => void;
   onReset: () => void;
 }) {
@@ -194,13 +165,8 @@ function ActiveView({
         )}
       </div>
 
-      {/* Phase bodies */}
-      {state.phase === "estimating" && (
-        <EstimatingBody estimate={estimate} estError={estError} onCancel={onCancel} />
-      )}
-
       {state.phase === "compressing" && (
-        <CompressingBody state={state} estimate={estimate} onCancel={onCancel} />
+        <CompressingBody state={state} onCancel={onCancel} />
       )}
 
       {state.phase === "presigning" && (
@@ -230,66 +196,18 @@ function ActiveView({
   );
 }
 
-function EstimatingBody({
-  estimate,
-  estError,
-  onCancel,
-}: {
-  estimate: Estimate | null;
-  estError: string | null;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="mt-3 rounded-md bg-neutral-50 p-3 text-sm dark:bg-neutral-900">
-      {estError ? (
-        <p className="text-red-600">Couldn't read the file: {estError}</p>
-      ) : !estimate ? (
-        <p className="text-neutral-500">Reading your video…</p>
-      ) : estimate.mode === "passthrough" ? (
-        <p className="text-neutral-700 dark:text-neutral-300">
-          Small enough to upload as-is. Starting upload…
-        </p>
-      ) : (
-        <div className="space-y-1 text-neutral-700 dark:text-neutral-300">
-          <p>
-            <strong>{humanDuration(estimate.durationSeconds)}</strong> of{" "}
-            {estimate.mode === "audio-only" ? "audio" : "video"}. Your browser
-            will shrink it to about{" "}
-            <strong>{formatBytes(estimate.estimatedOutputBytes)}</strong> so it
-            fits the 50 MB upload slot.
-          </p>
-          <p className="text-xs text-neutral-500">
-            Takes about <strong>{humanDuration(estimate.estimatedSeconds)}</strong> — keep this tab open. Your original file isn't changed.
-          </p>
-        </div>
-      )}
-      <div className="mt-3 flex justify-end">
-        <button
-          onClick={onCancel}
-          className="rounded-md border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 const ROTATING_MESSAGES = [
-  "Reading your video…",
-  "Extracting the audio…",
-  "Encoding to save space…",
-  "Still going — this is normal for long videos.",
-  "Keep this tab open…",
+  "This is normal — your browser is doing real work.",
+  "Keep this tab open, feel free to switch tabs.",
+  "Still going — large files take several minutes.",
+  "Hang tight…",
 ];
 
 function CompressingBody({
   state,
-  estimate,
   onCancel,
 }: {
   state: UploadState;
-  estimate: Estimate | null;
   onCancel: () => void;
 }) {
   const c = state.compress;
@@ -301,30 +219,42 @@ function CompressingBody({
 
   const pct = Math.round((c?.progress ?? 0) * 100);
   const etaLabel = c?.etaSeconds != null ? humanDuration(c.etaSeconds) : null;
+  const duration = c?.durationSeconds;
+
+  const primary = (() => {
+    if (!c) return "Starting…";
+    switch (c.phase) {
+      case "loading": return "Getting the compressor ready…";
+      case "mounting": return "Getting your file ready…";
+      case "analyzing": return "Analyzing your video…";
+      case "compressing":
+        return `Shrinking your video… ${pct}%${etaLabel ? ` · about ${etaLabel} left` : ""}`;
+      case "finalizing": return "Almost done — packaging the result…";
+      default: return "Working…";
+    }
+  })();
 
   return (
     <div className="mt-3 space-y-2">
       <ProgressBar progress={c?.overallProgress ?? 0.05} />
-      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-        <span className="font-medium">
-          {c?.phase === "loading" && "Getting the compressor ready…"}
-          {c?.phase === "reading" && "Checking the file…"}
-          {c?.phase === "mounting" && "Getting your file ready…"}
-          {c?.phase === "compressing" &&
-            `Shrinking your video… ${pct}%${etaLabel ? ` · about ${etaLabel} left` : ""}`}
-          {c?.phase === "finalizing" && "Almost done — packaging the result…"}
-          {!c && "Starting…"}
-        </span>
-      </div>
-      <p className="text-xs text-neutral-500">{ROTATING_MESSAGES[msgIdx]}</p>
-      {estimate && c?.phase === "compressing" && (
+      <p className="text-sm font-medium">{primary}</p>
+
+      {duration != null && c?.phase === "compressing" && (
         <p className="text-xs text-neutral-500">
-          Shrinking{" "}
-          <strong>{humanDuration(estimate.durationSeconds)}</strong>{" "}
-          of {estimate.mode === "audio-only" ? "audio" : "video"} to about{" "}
-          <strong>{formatBytes(estimate.estimatedOutputBytes)}</strong>.
+          <strong>{humanDuration(duration)}</strong> of{" "}
+          {c.mode === "audio-only" ? "audio" : "video"} → ~{" "}
+          <strong>{formatBytes(47 * 1024 * 1024)}</strong> output
         </p>
       )}
+
+      {/* Rotating reassurance line */}
+      <p className="text-xs text-neutral-500">{ROTATING_MESSAGES[msgIdx]}</p>
+
+      {/* Live log tail during the slow analysis phase — proves the worker is alive */}
+      {c?.phase === "analyzing" && c.message && (
+        <p className="truncate font-mono text-[10px] text-neutral-400">{c.message}</p>
+      )}
+
       <div className="flex justify-end pt-1">
         <button
           onClick={onCancel}
