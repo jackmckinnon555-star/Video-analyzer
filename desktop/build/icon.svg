@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" rx="192" fill="#0B2A4A"/>
+  <path d="M384 288 L768 512 L384 736 Z" fill="#C7A35A"/>
+  <text x="512" y="928" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="160" letter-spacing="24" fill="#F6F4EF">TRA</text>
+</svg>

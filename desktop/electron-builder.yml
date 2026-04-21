@@ -1,0 +1,56 @@
+appId: com.tra.video-uploader
+productName: TRA Video Uploader
+copyright: Copyright © 2026 TRA
+artifactName: ${productName}-${os}-${arch}.${ext}
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - dist/**/*
+  - renderer/**/*
+  - package.json
+
+asar: true
+asarUnpack:
+  # ffmpeg / ffprobe binaries need to live outside the asar archive so the
+  # child_process can spawn them at runtime.
+  - node_modules/ffmpeg-static/**/*
+  - node_modules/ffprobe-static/**/*
+
+# Windows ─────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: TRA Video Uploader
+
+# macOS ───────────────────────────────────────────────
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.productivity
+  # Skip code signing for v1 — users dismiss one Gatekeeper warning.
+  identity: null
+
+dmg:
+  title: TRA Video Uploader ${version}
+
+# Linux (bonus — cheap to enable since we already build on CI) ────────
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: build/icon.png
+  category: AudioVideo

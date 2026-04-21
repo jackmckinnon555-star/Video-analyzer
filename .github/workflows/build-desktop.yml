@@ -1,0 +1,105 @@
+name: Build desktop installers
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: desktop-windows
+            artifact_paths: |
+              desktop/dist-electron/*.exe
+              desktop/dist-electron/*.blockmap
+          - os: macos-latest
+            artifact_name: desktop-macos
+            artifact_paths: |
+              desktop/dist-electron/*.dmg
+              desktop/dist-electron/*.zip
+              desktop/dist-electron/*.blockmap
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Build (icon + tsc)
+        working-directory: desktop
+        run: npm run build
+
+      - name: Package with electron-builder
+        working-directory: desktop
+        # --publish=never: we upload artifacts ourselves in the next job
+        run: npx electron-builder --publish=never
+        env:
+          # electron-builder prefers a non-null token to exist, but we pass
+          # --publish=never so it won't actually publish. Leave unset.
+          GH_TOKEN: ""
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_paths }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    # Only create a release on actual tag pushes, not workflow_dispatch smoke runs.
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifact tree
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.zip" -o -name "*.blockmap" \) -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: TRA Video Uploader ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          body: |
+            ## TRA Video Uploader — desktop installers
+
+            One-click upload for multi-GB videos. Bundles ffmpeg; no install required beyond running the installer.
+
+            ### Downloads
+
+            - **Windows**: `TRA Video Uploader-win-x64.exe`
+            - **macOS (Intel)**: `TRA Video Uploader-mac-x64.dmg`
+            - **macOS (Apple Silicon)**: `TRA Video Uploader-mac-arm64.dmg`
+
+            ### First-run warnings
+
+            Unsigned v1 build. Dismiss one platform warning per install:
+
+            - **Windows SmartScreen**: click "More info" → "Run anyway".
+            - **macOS Gatekeeper**: right-click the `.app` → "Open" → "Open".
+
+            On first run the app asks for the site password once, then caches it locally.
+          files: release/*

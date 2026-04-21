@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+    <title>TRA Video Uploader</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
+          <rect width="64" height="64" rx="12" fill="#0B2A4A"/>
+          <path d="M24 18 L48 32 L24 46 Z" fill="#C7A35A"/>
+          <text x="32" y="58" text-anchor="middle" font-family="system-ui" font-weight="700" font-size="10" letter-spacing="1.5" fill="#F6F4EF">TRA</text>
+        </svg>
+        <span>Video Uploader</span>
+      </div>
+      <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </header>
+
+    <main>
+      <!-- Password setup / first run -->
+      <section id="password-setup" class="panel" hidden>
+        <h2>First time here</h2>
+        <p class="muted">Enter the site password that your team uses to sign in to the web app. It's stored locally on your computer and only sent to your Video Analyzer server.</p>
+        <form id="password-form" class="form-row">
+          <input id="password-input" type="password" placeholder="Site password" autocomplete="off" />
+          <button type="submit" class="btn primary">Save</button>
+        </form>
+        <p id="password-error" class="error" hidden></p>
+      </section>
+
+      <!-- Idle drop zone -->
+      <section id="idle" class="panel" hidden>
+        <div id="drop-zone" class="drop-zone" tabindex="0" role="button" aria-label="Drop or pick a video file">
+          <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+            <rect width="64" height="64" rx="12" fill="#0B2A4A"/>
+            <path d="M24 18 L48 32 L24 46 Z" fill="#C7A35A"/>
+            <text x="32" y="58" text-anchor="middle" font-family="system-ui" font-weight="700" font-size="10" letter-spacing="1.5" fill="#F6F4EF">TRA</text>
+          </svg>
+          <div>
+            <div class="dz-title">Drop a video file here</div>
+            <div class="dz-sub">or click to browse · any size</div>
+          </div>
+        </div>
+        <p class="muted center small">
+          Compresses with ffmpeg locally, uploads the result to your Video Analyzer.<br>
+          Nothing leaves your computer until the upload step.
+        </p>
+      </section>
+
+      <!-- Active run (probing / compressing / uploading / finalizing) -->
+      <section id="active" class="panel" hidden>
+        <div class="file-info">
+          <div class="file-name" id="file-name"></div>
+          <div class="file-meta" id="file-meta"></div>
+        </div>
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" id="progress-fill" style="width: 2%"></div>
+        </div>
+        <div class="phase-label" id="phase-label">Starting…</div>
+        <div class="phase-sub" id="phase-sub"></div>
+        <div class="row-end">
+          <button id="cancel-btn" class="btn ghost">Cancel</button>
+        </div>
+      </section>
+
+      <!-- Done -->
+      <section id="done" class="panel success" hidden>
+        <h2>Uploaded</h2>
+        <p class="muted">Your video is processing on the server. Open the results page to watch progress and see the analysis when it's ready (usually 2–5 min).</p>
+        <div class="row">
+          <button id="open-result-btn" class="btn primary">Open results in browser</button>
+          <button id="upload-another-btn" class="btn ghost">Upload another</button>
+        </div>
+      </section>
+
+      <!-- Error -->
+      <section id="error" class="panel error" hidden>
+        <h2>Something went wrong</h2>
+        <p id="error-message" class="error"></p>
+        <div class="row">
+          <button id="retry-btn" class="btn primary">Try again</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Settings modal -->
+    <dialog id="settings-modal">
+      <form method="dialog" class="settings">
+        <h2>Settings</h2>
+
+        <label for="base-url-input">Server URL</label>
+        <input id="base-url-input" type="url" placeholder="https://…netlify.app" />
+
+        <label for="settings-password-input">Site password</label>
+        <input id="settings-password-input" type="password" placeholder="Leave blank to keep current" autocomplete="off" />
+        <button type="button" id="clear-password-btn" class="link">Clear saved password</button>
+
+        <p class="muted small">
+          Stored at <code id="config-path-hint"></code>. Override once with the
+          <code>VIDEO_ANALYZER_PASSWORD</code> environment variable.
+        </p>
+
+        <div class="row-end">
+          <button type="button" id="settings-cancel" class="btn ghost">Cancel</button>
+          <button type="button" id="settings-save" class="btn primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

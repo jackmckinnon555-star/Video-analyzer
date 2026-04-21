@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-electron/
+build/icon.png
+build/icon.ico
+build/icon.icns
+.DS_Store
+*.log
