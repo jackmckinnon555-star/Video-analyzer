@@ -42,23 +42,41 @@
       code, pre { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
       code { background: var(--rule); padding: 1px 6px; border-radius: 4px; }
       pre { background: var(--rule); padding: 12px 16px; border-radius: 8px; overflow-x: auto; margin: 8px 0 16px; }
-      .download-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0 24px; }
-      .dl { display: block; padding: 14px 16px; background: var(--navy); color: var(--cream); border-radius: 10px; text-decoration: none; transition: transform 0.1s, opacity 0.1s; }
-      .dl:hover { transform: translateY(-1px); opacity: 0.92; }
-      .dl .name { font-weight: 600; font-size: 15px; }
-      .dl .meta { display: block; font-size: 12px; opacity: 0.75; margin-top: 2px; }
-      .dl.alt { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
+
+      /* Installer downloads — the hero interaction on this page */
+      .installer-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 24px 0 12px; }
+      .installer {
+        display: flex; flex-direction: column; gap: 2px;
+        padding: 20px 22px;
+        background: var(--navy); color: var(--cream);
+        border-radius: 12px; text-decoration: none;
+        transition: transform 0.12s, box-shadow 0.12s;
+        box-shadow: 0 2px 0 rgba(0,0,0,0.06);
+      }
+      .installer:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+      .installer .os { font-size: 12px; opacity: 0.7; letter-spacing: 0.08em; text-transform: uppercase; }
+      .installer .name { font-weight: 600; font-size: 17px; }
+      .installer .meta { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+
       .callout { border-left: 3px solid var(--gold); padding: 10px 14px; background: color-mix(in srgb, var(--gold) 10%, transparent); border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; }
       .callout.warn { border-left-color: #ca8a04; background: color-mix(in srgb, #ca8a04 8%, transparent); }
-      a.back { display: inline-block; margin-top: 40px; font-size: 14px; color: var(--navy); }
-      @media (prefers-color-scheme: dark) { a.back { color: var(--gold); } }
+
       .step { counter-increment: step; display: flex; gap: 14px; margin: 16px 0; }
       .step::before { content: counter(step); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--navy); color: var(--cream); font-weight: 700; font-size: 13px; }
       .steps { counter-reset: step; padding-left: 0; list-style: none; }
+
+      .dl { display: block; padding: 12px 14px; background: transparent; color: var(--ink); border-radius: 10px; text-decoration: none; border: 1px solid var(--rule); transition: background 0.1s; }
+      .dl:hover { background: var(--rule); }
+      .dl .name { font-weight: 600; font-size: 14px; }
+      .dl .meta { display: block; font-size: 12px; opacity: 0.75; margin-top: 2px; }
+      .download-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 12px 0 16px; }
+
       details { margin-top: 28px; border-top: 1px solid var(--rule); padding-top: 20px; }
       details summary { cursor: pointer; font-weight: 600; font-size: 15px; padding: 4px 0; }
       details summary::marker { color: var(--muted); }
       .lean { color: var(--muted); font-size: 14px; }
+      a.back { display: inline-block; margin-top: 40px; font-size: 14px; color: var(--navy); }
+      @media (prefers-color-scheme: dark) { a.back { color: var(--gold); } }
     </style>
   </head>
   <body>
@@ -80,18 +98,80 @@
 
     <main>
       <div class="container">
-        <h1>Upload big videos with one click</h1>
+        <h1>Upload any size video in one click</h1>
         <p class="lede">
-          The in-browser compressor can't reliably handle multi-GB files.
-          This small script does the work on your computer — compresses, uploads,
-          and opens the results page — in about the time it takes to get coffee.
+          The desktop uploader bundles native ffmpeg — nothing to install
+          separately. Drop a video on the app, walk away for a minute, come
+          back to a results page.
         </p>
 
+        <h2 style="margin-top:8px">Download the installer</h2>
+        <div class="installer-row">
+          <a
+            class="installer"
+            href="https://github.com/jackmckinnon555-star/Video-analyzer/releases/latest/download/TRA%20Video%20Uploader-win-x64.exe"
+          >
+            <span class="os">Windows 10 / 11</span>
+            <span class="name">TRA Video Uploader.exe</span>
+            <span class="meta">~120 MB · per-user install</span>
+          </a>
+          <a
+            class="installer"
+            href="https://github.com/jackmckinnon555-star/Video-analyzer/releases/latest/download/TRA%20Video%20Uploader-mac-arm64.dmg"
+          >
+            <span class="os">macOS · Apple Silicon</span>
+            <span class="name">TRA Video Uploader.dmg</span>
+            <span class="meta">~120 MB · M1 / M2 / M3 / M4</span>
+          </a>
+          <a
+            class="installer"
+            href="https://github.com/jackmckinnon555-star/Video-analyzer/releases/latest/download/TRA%20Video%20Uploader-mac-x64.dmg"
+          >
+            <span class="os">macOS · Intel</span>
+            <span class="name">TRA Video Uploader.dmg</span>
+            <span class="meta">~120 MB · 2019 Intel Macs</span>
+          </a>
+        </div>
+
+        <div class="callout warn">
+          <strong>First launch, one-time warning:</strong><br>
+          <strong>Windows SmartScreen</strong> — click <em>More info → Run anyway</em>.<br>
+          <strong>macOS Gatekeeper</strong> — right-click the app, choose <em>Open</em>, then <em>Open</em> again.<br>
+          Unsigned v1 build. Signing is on the roadmap.
+        </div>
+
+        <h2>How it works</h2>
         <ol class="steps">
           <li class="step">
             <div>
-              <strong>Install ffmpeg if you haven't.</strong>
-              <pre><code># Windows
+              <strong>Install and launch.</strong>
+              <p class="lean" style="margin:4px 0 0">Creates a shortcut on your desktop and in the start menu / Applications folder.</p>
+            </div>
+          </li>
+          <li class="step">
+            <div>
+              <strong>Enter the site password once.</strong>
+              <p class="lean" style="margin:4px 0 0">Cached locally; you won't be asked again on this computer.</p>
+            </div>
+          </li>
+          <li class="step">
+            <div>
+              <strong>Drop a video file on the window.</strong>
+              <p class="lean" style="margin:4px 0 0">Compresses with native ffmpeg (2-5× realtime), uploads to the server, opens the results page in your browser. A 3-hour video is usually done in under 2 minutes.</p>
+            </div>
+          </li>
+        </ol>
+
+        <details>
+          <summary>Prefer the no-install script?</summary>
+          <p class="lean" style="margin-top:12px">
+            If you already have ffmpeg installed and would rather drive
+            this from a terminal, grab the script version. Same output,
+            same one-command flow.
+          </p>
+
+          <h3>Install ffmpeg first</h3>
+          <pre><code># Windows
 winget install Gyan.FFmpeg
 
 # macOS
@@ -99,94 +179,42 @@ brew install ffmpeg
 
 # Linux (Debian / Ubuntu)
 sudo apt install ffmpeg</code></pre>
-              <p class="lean">Verify: open a terminal and run <code>ffmpeg -version</code>.</p>
-            </div>
-          </li>
 
-          <li class="step">
-            <div>
-              <strong>Download the uploader script:</strong>
-              <div class="download-row">
-                <a class="dl" href="./upload.ps1" download>
-                  <span class="name">upload.ps1</span>
-                  <span class="meta">Windows · PowerShell</span>
-                </a>
-                <a class="dl" href="./upload.sh" download>
-                  <span class="name">upload.sh</span>
-                  <span class="meta">macOS / Linux / Git Bash</span>
-                </a>
-                <a class="dl alt" href="./README.txt" download>
-                  <span class="name">README.txt</span>
-                  <span class="meta">Full instructions</span>
-                </a>
-              </div>
-            </div>
-          </li>
-
-          <li class="step">
-            <div>
-              <strong>Run it against your video.</strong>
-
-              <h3>Windows (PowerShell)</h3>
-              <pre><code># Double-click the script, paste the path it asks for
-# OR pass the file path directly:
-.\upload.ps1 "C:\path\to\video.mp4"
-
-# If PowerShell blocks unsigned scripts:
-powershell -ExecutionPolicy Bypass -File .\upload.ps1 "video.mp4"</code></pre>
-
-              <h3>macOS / Linux / Git Bash</h3>
-              <pre><code>chmod +x upload.sh
-./upload.sh path/to/video.mp4</code></pre>
-
-              <p>First run prompts for the site password — it's cached in
-                <code>%APPDATA%\video-analyzer\config.json</code>
-                (or <code>~/.config/video-analyzer/config.json</code>) so you
-                only enter it once.</p>
-            </div>
-          </li>
-
-          <li class="step">
-            <div>
-              <strong>That's it.</strong>
-              <p>
-                The script compresses → uploads → finalizes → opens the results
-                page in your browser. Processing takes another 2-5 minutes on
-                the server side; your browser tab shows live status.
-              </p>
-            </div>
-          </li>
-        </ol>
-
-        <div class="callout">
-          Native ffmpeg runs at 2-5× realtime — a 3-hour video compresses in
-          30-90 seconds. Upload is another 10-30 seconds. You're usually done
-          in under 2 minutes.
-        </div>
-
-        <details>
-          <summary>Other scripts on this page</summary>
-          <p class="lean" style="margin-top:12px">
-            If you just want a compressed file (not a full upload), the
-            original compress-only scripts still work. Same settings, just
-            dump the output next to the original:
-          </p>
+          <h3>Download the script</h3>
           <div class="download-row">
-            <a class="dl alt" href="./compress.ps1" download>
-              <span class="name">compress.ps1</span>
-              <span class="meta">Windows · compress only</span>
+            <a class="dl" href="./upload.ps1" download>
+              <span class="name">upload.ps1</span>
+              <span class="meta">Windows · PowerShell</span>
             </a>
-            <a class="dl alt" href="./compress.sh" download>
-              <span class="name">compress.sh</span>
-              <span class="meta">Unix · compress only</span>
+            <a class="dl" href="./upload.sh" download>
+              <span class="name">upload.sh</span>
+              <span class="meta">macOS / Linux / Git Bash</span>
+            </a>
+            <a class="dl" href="./README.txt" download>
+              <span class="name">README.txt</span>
+              <span class="meta">Full instructions</span>
             </a>
           </div>
+
+          <h3>Run it</h3>
+          <pre><code># Windows
+.\upload.ps1 "C:\path\to\video.mp4"
+
+# macOS / Linux
+chmod +x upload.sh
+./upload.sh path/to/video.mp4</code></pre>
+          <p class="lean">
+            First run prompts for the site password — cached in
+            <code>%APPDATA%\video-analyzer\config.json</code> or
+            <code>~/.config/video-analyzer/config.json</code>.
+          </p>
         </details>
 
         <details>
-          <summary>Prefer a one-liner?</summary>
+          <summary>Prefer a raw ffmpeg one-liner?</summary>
           <p class="lean" style="margin-top:12px">
-            These match what the script produces (audio-only; fits any length):
+            Matches what the installer and scripts produce. Upload the
+            resulting file through the homepage uploader.
           </p>
           <pre><code>ffmpeg -i input.mp4 -vn -c:a aac -b:a 32k -ac 1 -movflags +faststart output.m4a</code></pre>
           <p class="lean">For short clips where you want playable video:</p>
@@ -200,13 +228,13 @@ powershell -ExecutionPolicy Bypass -File .\upload.ps1 "video.mp4"</code></pre>
         <details>
           <summary>Troubleshooting</summary>
           <div style="margin-top:12px">
-            <p><strong>"ffmpeg not found"</strong> — the installer didn't put it on PATH. Restart your terminal. On Windows, sometimes you need to sign out and back in.</p>
-            <p><strong>"Invalid site password"</strong> — the script cleared the bad password from your config file. Run it again and re-enter.</p>
-            <p><strong>Windows SmartScreen blocked the .ps1</strong> — right-click the file → Properties → check "Unblock" at the bottom → OK → retry.</p>
-            <p><strong>Output is still &gt;50 MB</strong> — the source is extraordinarily long (&gt;10 hours) or dense. Trim it first:<br>
+            <p><strong>Installer download is blocked</strong> — your browser or antivirus may flag unsigned installers. Use the GitHub Releases page directly: <a href="https://github.com/jackmckinnon555-star/Video-analyzer/releases/latest">releases/latest</a>.</p>
+            <p><strong>App opens but "site unreachable"</strong> — check your internet. The app talks to <code>video-analyzer-tra.netlify.app</code> over HTTPS.</p>
+            <p><strong>Invalid site password</strong> — the app clears the bad password automatically. Re-enter when prompted.</p>
+            <p><strong>"ffmpeg not found" (scripts path only)</strong> — restart your terminal after installing. On Windows, sometimes you need to sign out and back in to refresh PATH.</p>
+            <p><strong>Output is still too big</strong> — the source is extraordinarily long (&gt;10 hours) or dense. Trim it first:<br>
               <code>ffmpeg -i input.mp4 -t 3600 -c copy part1.mp4</code>
             </p>
-            <p><strong>I'd rather compress in the browser</strong> — the <a href="/compress">experimental browser compressor</a> still exists. It may not work for multi-GB files.</p>
           </div>
         </details>
 
