@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#0B2A4A" />
-    <title>Local compression — TRA Video Analyzer</title>
+    <title>Desktop uploader — TRA Video Analyzer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -22,93 +22,43 @@
         --rule: #e3ded6;
       }
       @media (prefers-color-scheme: dark) {
-        :root {
-          --cream: #0d0d0f;
-          --ink: #f5f5f5;
-          --muted: #b5b5b5;
-          --rule: #26262c;
-        }
+        :root { --cream:#0d0d0f; --ink:#f5f5f5; --muted:#b5b5b5; --rule:#26262c; }
       }
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; }
-      body {
-        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-        background: var(--cream);
-        color: var(--ink);
-        line-height: 1.55;
-        -webkit-font-smoothing: antialiased;
-      }
-      header {
-        background: var(--navy);
-        color: var(--cream);
-        padding: 24px 24px 22px;
-      }
+      body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: var(--cream); color: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+      header { background: var(--navy); color: var(--cream); padding: 24px 24px 22px; }
       .container { max-width: 780px; margin: 0 auto; }
-      .brand {
-        display: inline-flex; align-items: center; gap: 10px;
-        text-decoration: none; color: inherit;
-      }
+      .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
       .brand svg { border-radius: 6px; }
       .brand strong { font-weight: 700; font-size: 14px; letter-spacing: 0.04em; }
       .brand .sub { font-size: 12px; opacity: 0.7; }
       main { padding: 40px 24px 80px; }
       h1 { font-size: 34px; line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.01em; }
       .lede { font-size: 17px; color: var(--muted); margin: 0 0 32px; }
-      h2 { font-size: 20px; margin: 32px 0 8px; letter-spacing: -0.005em; }
+      h2 { font-size: 20px; margin: 36px 0 8px; letter-spacing: -0.005em; }
       h3 { font-size: 15px; margin: 20px 0 4px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
       p, li { font-size: 15px; }
-      code, pre {
-        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 13px;
-      }
-      code {
-        background: var(--rule);
-        padding: 1px 6px;
-        border-radius: 4px;
-      }
-      pre {
-        background: var(--rule);
-        padding: 12px 16px;
-        border-radius: 8px;
-        overflow-x: auto;
-        margin: 8px 0 16px;
-      }
-      .download-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 12px;
-        margin: 16px 0 24px;
-      }
-      .dl {
-        display: block;
-        padding: 14px 16px;
-        background: var(--navy);
-        color: var(--cream);
-        border-radius: 10px;
-        text-decoration: none;
-        transition: transform 0.1s, opacity 0.1s;
-      }
+      code, pre { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      code { background: var(--rule); padding: 1px 6px; border-radius: 4px; }
+      pre { background: var(--rule); padding: 12px 16px; border-radius: 8px; overflow-x: auto; margin: 8px 0 16px; }
+      .download-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0 24px; }
+      .dl { display: block; padding: 14px 16px; background: var(--navy); color: var(--cream); border-radius: 10px; text-decoration: none; transition: transform 0.1s, opacity 0.1s; }
       .dl:hover { transform: translateY(-1px); opacity: 0.92; }
       .dl .name { font-weight: 600; font-size: 15px; }
       .dl .meta { display: block; font-size: 12px; opacity: 0.75; margin-top: 2px; }
       .dl.alt { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
-      .callout {
-        border-left: 3px solid var(--gold);
-        padding: 10px 14px;
-        background: color-mix(in srgb, var(--gold) 10%, transparent);
-        border-radius: 0 8px 8px 0;
-        margin: 16px 0;
-        font-size: 14px;
-      }
-      a.back {
-        display: inline-block;
-        margin-top: 40px;
-        font-size: 14px;
-        color: var(--navy);
-      }
-      @media (prefers-color-scheme: dark) {
-        a.back { color: var(--gold); }
-      }
+      .callout { border-left: 3px solid var(--gold); padding: 10px 14px; background: color-mix(in srgb, var(--gold) 10%, transparent); border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; }
+      .callout.warn { border-left-color: #ca8a04; background: color-mix(in srgb, #ca8a04 8%, transparent); }
+      a.back { display: inline-block; margin-top: 40px; font-size: 14px; color: var(--navy); }
+      @media (prefers-color-scheme: dark) { a.back { color: var(--gold); } }
+      .step { counter-increment: step; display: flex; gap: 14px; margin: 16px 0; }
+      .step::before { content: counter(step); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--navy); color: var(--cream); font-weight: 700; font-size: 13px; }
+      .steps { counter-reset: step; padding-left: 0; list-style: none; }
+      details { margin-top: 28px; border-top: 1px solid var(--rule); padding-top: 20px; }
+      details summary { cursor: pointer; font-weight: 600; font-size: 15px; padding: 4px 0; }
+      details summary::marker { color: var(--muted); }
+      .lean { color: var(--muted); font-size: 14px; }
     </style>
   </head>
   <body>
@@ -122,7 +72,7 @@
           </svg>
           <span>
             <strong>TRA Video Analyzer</strong>
-            <span class="sub">· local compression tool</span>
+            <span class="sub">· desktop uploader</span>
           </span>
         </a>
       </div>
@@ -130,24 +80,18 @@
 
     <main>
       <div class="container">
-        <h1>Compress large videos locally</h1>
+        <h1>Upload big videos with one click</h1>
         <p class="lede">
-          The uploader's default in-browser compressor tops out near 2 GB.
-          Two alternatives for bigger videos:
-        </p>
-        <div class="callout">
-          <strong>Prefer no install?</strong> A streaming browser
-          compressor at <a href="/compress">/compress</a> handles any
-          file size in your browser (slower — runs at ~0.25× realtime
-          single-threaded, so a 3-hour talk takes 10-15 min).
-        </div>
-        <p class="lede" style="margin-top:20px">
-          Or use native ffmpeg below — same output, ~2-5× realtime
-          (3-hour talk = 30-90 seconds). Requires ffmpeg to be installed.
+          The in-browser compressor can't reliably handle multi-GB files.
+          This small script does the work on your computer — compresses, uploads,
+          and opens the results page — in about the time it takes to get coffee.
         </p>
 
-        <h2>1. Install ffmpeg (once)</h2>
-        <pre><code># Windows
+        <ol class="steps">
+          <li class="step">
+            <div>
+              <strong>Install ffmpeg if you haven't.</strong>
+              <pre><code># Windows
 winget install Gyan.FFmpeg
 
 # macOS
@@ -155,57 +99,116 @@ brew install ffmpeg
 
 # Linux (Debian / Ubuntu)
 sudo apt install ffmpeg</code></pre>
-        <p>Verify: open a terminal and run <code>ffmpeg -version</code>.</p>
+              <p class="lean">Verify: open a terminal and run <code>ffmpeg -version</code>.</p>
+            </div>
+          </li>
 
-        <h2>2. Download the script</h2>
-        <div class="download-row">
-          <a class="dl" href="./compress.ps1" download>
-            <span class="name">compress.ps1</span>
-            <span class="meta">Windows · PowerShell</span>
-          </a>
-          <a class="dl" href="./compress.sh" download>
-            <span class="name">compress.sh</span>
-            <span class="meta">macOS / Linux / Git Bash</span>
-          </a>
-          <a class="dl alt" href="./README.txt" download>
-            <span class="name">README.txt</span>
-            <span class="meta">Full instructions</span>
-          </a>
-        </div>
+          <li class="step">
+            <div>
+              <strong>Download the uploader script:</strong>
+              <div class="download-row">
+                <a class="dl" href="./upload.ps1" download>
+                  <span class="name">upload.ps1</span>
+                  <span class="meta">Windows · PowerShell</span>
+                </a>
+                <a class="dl" href="./upload.sh" download>
+                  <span class="name">upload.sh</span>
+                  <span class="meta">macOS / Linux / Git Bash</span>
+                </a>
+                <a class="dl alt" href="./README.txt" download>
+                  <span class="name">README.txt</span>
+                  <span class="meta">Full instructions</span>
+                </a>
+              </div>
+            </div>
+          </li>
 
-        <h2>3. Run it</h2>
+          <li class="step">
+            <div>
+              <strong>Run it against your video.</strong>
 
-        <h3>Windows — PowerShell</h3>
-        <pre><code># Replace with the actual path to your video
-.\compress.ps1 "C:\path\to\video.mp4"
+              <h3>Windows (PowerShell)</h3>
+              <pre><code># Double-click the script, paste the path it asks for
+# OR pass the file path directly:
+.\upload.ps1 "C:\path\to\video.mp4"
 
-# Or drag-drop the video onto compress.ps1 in Explorer.
 # If PowerShell blocks unsigned scripts:
-powershell -ExecutionPolicy Bypass -File .\compress.ps1 "video.mp4"</code></pre>
+powershell -ExecutionPolicy Bypass -File .\upload.ps1 "video.mp4"</code></pre>
 
-        <h3>macOS / Linux / Git Bash</h3>
-        <pre><code>chmod +x compress.sh
-./compress.sh path/to/video.mp4</code></pre>
+              <h3>macOS / Linux / Git Bash</h3>
+              <pre><code>chmod +x upload.sh
+./upload.sh path/to/video.mp4</code></pre>
+
+              <p>First run prompts for the site password — it's cached in
+                <code>%APPDATA%\video-analyzer\config.json</code>
+                (or <code>~/.config/video-analyzer/config.json</code>) so you
+                only enter it once.</p>
+            </div>
+          </li>
+
+          <li class="step">
+            <div>
+              <strong>That's it.</strong>
+              <p>
+                The script compresses → uploads → finalizes → opens the results
+                page in your browser. Processing takes another 2-5 minutes on
+                the server side; your browser tab shows live status.
+              </p>
+            </div>
+          </li>
+        </ol>
 
         <div class="callout">
-          Output lands alongside the original as
-          <code>name-compressed.mp4</code> (or <code>.m4a</code> for
-          multi-hour videos). Drop that file into the web uploader —
-          it's already under 50 MB so the browser compressor will skip.
+          Native ffmpeg runs at 2-5× realtime — a 3-hour video compresses in
+          30-90 seconds. Upload is another 10-30 seconds. You're usually done
+          in under 2 minutes.
         </div>
 
-        <h2>Prefer a one-liner?</h2>
-        <p>
-          If you're comfortable with ffmpeg, these settings match what the web
-          tool produces (audio-only; works for any length):
-        </p>
-        <pre><code>ffmpeg -i input.mp4 -vn -c:a aac -b:a 32k -ac 1 -movflags +faststart output.m4a</code></pre>
-        <p>For short clips where you want playable video:</p>
-        <pre><code>ffmpeg -i input.mp4 \
+        <details>
+          <summary>Other scripts on this page</summary>
+          <p class="lean" style="margin-top:12px">
+            If you just want a compressed file (not a full upload), the
+            original compress-only scripts still work. Same settings, just
+            dump the output next to the original:
+          </p>
+          <div class="download-row">
+            <a class="dl alt" href="./compress.ps1" download>
+              <span class="name">compress.ps1</span>
+              <span class="meta">Windows · compress only</span>
+            </a>
+            <a class="dl alt" href="./compress.sh" download>
+              <span class="name">compress.sh</span>
+              <span class="meta">Unix · compress only</span>
+            </a>
+          </div>
+        </details>
+
+        <details>
+          <summary>Prefer a one-liner?</summary>
+          <p class="lean" style="margin-top:12px">
+            These match what the script produces (audio-only; fits any length):
+          </p>
+          <pre><code>ffmpeg -i input.mp4 -vn -c:a aac -b:a 32k -ac 1 -movflags +faststart output.m4a</code></pre>
+          <p class="lean">For short clips where you want playable video:</p>
+          <pre><code>ffmpeg -i input.mp4 \
   -c:v libx264 -preset ultrafast -b:v 300k -maxrate 300k -bufsize 600k \
   -vf "scale='min(640,iw)':'-2'" \
   -c:a aac -b:a 32k -ac 1 \
   -movflags +faststart output.mp4</code></pre>
+        </details>
+
+        <details>
+          <summary>Troubleshooting</summary>
+          <div style="margin-top:12px">
+            <p><strong>"ffmpeg not found"</strong> — the installer didn't put it on PATH. Restart your terminal. On Windows, sometimes you need to sign out and back in.</p>
+            <p><strong>"Invalid site password"</strong> — the script cleared the bad password from your config file. Run it again and re-enter.</p>
+            <p><strong>Windows SmartScreen blocked the .ps1</strong> — right-click the file → Properties → check "Unblock" at the bottom → OK → retry.</p>
+            <p><strong>Output is still &gt;50 MB</strong> — the source is extraordinarily long (&gt;10 hours) or dense. Trim it first:<br>
+              <code>ffmpeg -i input.mp4 -t 3600 -c copy part1.mp4</code>
+            </p>
+            <p><strong>I'd rather compress in the browser</strong> — the <a href="/compress">experimental browser compressor</a> still exists. It may not work for multi-GB files.</p>
+          </div>
+        </details>
 
         <a class="back" href="/">← Back to the uploader</a>
       </div>

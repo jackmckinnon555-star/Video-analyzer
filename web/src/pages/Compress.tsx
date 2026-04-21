@@ -85,12 +85,22 @@ export default function Compress() {
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
         <h1 className="mb-2 text-2xl font-semibold tracking-tight">Compress in your browser</h1>
-        <p className="mb-6 text-sm text-neutral-500">
-          Handles any size file (3 GB, 10 GB, more) by streaming from disk instead
-          of loading into memory. Output is identical to the native scripts — drop
-          the result into the uploader when done. No account needed, nothing is
-          uploaded from this page.
+        <p className="mb-4 text-sm text-neutral-500">
+          Experimental — works for many videos, but multi-GB files can freeze the
+          tab. For reliability, use the{" "}
+          <a
+            href="/compress-tool/"
+            className="font-medium text-neutral-700 underline underline-offset-2 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100"
+          >
+            desktop uploader
+          </a>
+          {" "}instead — it runs native ffmpeg and uploads in one step.
         </p>
+        <div className="mb-6 rounded-md border-l-4 border-amber-500 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <strong>Heads up:</strong> ffmpeg.wasm in the browser is single-threaded
+          (slow — ~0.25× realtime) and the load step can hang silently on some
+          machines. The <a href="/compress-tool/" className="underline">desktop uploader</a> avoids all of this.
+        </div>
 
         {/* Drop zone / file input */}
         {phase === "idle" && (

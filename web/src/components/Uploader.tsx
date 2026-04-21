@@ -85,44 +85,72 @@ function IdleView({
   showHelp: boolean;
 }) {
   return (
-    <div className="text-center">
-      <button
-        onClick={onClick}
-        className="min-h-[44px] rounded-md bg-neutral-900 px-6 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        aria-label="Upload a video"
-      >
-        Upload a video
-      </button>
-      <p className="mt-2 text-xs text-neutral-500">
-        Any size. Your browser shrinks large files automatically before upload.
-        <button
-          onClick={onToggleHelp}
-          className="ml-1 rounded-full border border-neutral-300 px-1.5 py-0 text-[10px] text-neutral-500 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-          aria-label="How it works"
-          aria-expanded={showHelp}
-        >
-          ?
-        </button>
-      </p>
+    <div>
+      {/* Primary CTA: the desktop uploader. Handles any file size reliably. */}
+      <div className="rounded-md border border-neutral-900 bg-neutral-900 p-4 text-white dark:border-white dark:bg-white dark:text-neutral-900">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-md">
+            <div className="text-sm font-semibold">For videos larger than 50 MB</div>
+            <p className="mt-1 text-xs opacity-80">
+              Download our desktop uploader. It compresses on your computer
+              using native ffmpeg (fast, reliable, any size) and uploads
+              straight to the server. One click, one script, one results page.
+            </p>
+          </div>
+          <a
+            href="/compress-tool/"
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-1 rounded-md bg-white px-4 py-2 text-xs font-medium text-neutral-900 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800"
+          >
+            Get the desktop uploader
+            <span aria-hidden>→</span>
+          </a>
+        </div>
+      </div>
 
-      {showHelp && (
-        <ol className="mx-auto mt-3 max-w-md space-y-1 rounded-md bg-neutral-50 p-3 text-left text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
-          <li>
-            <strong className="text-neutral-800 dark:text-neutral-200">1.</strong>{" "}
-            Drop any video here, any size.
-          </li>
-          <li>
-            <strong className="text-neutral-800 dark:text-neutral-200">2.</strong>{" "}
-            If it's large, your browser shrinks it first —{" "}
-            <em>stays on your computer until it's ready.</em>
-          </li>
-          <li>
-            <strong className="text-neutral-800 dark:text-neutral-200">3.</strong>{" "}
-            Analysis takes 2–5 min after upload. You'll see chapters,
-            transcript, and highlights.
-          </li>
-        </ol>
-      )}
+      {/* Secondary: direct browser upload (small files / already-compressed files) */}
+      <div className="mt-4 text-center">
+        <button
+          onClick={onClick}
+          className="min-h-[44px] rounded-md border border-neutral-300 bg-white px-6 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800"
+          aria-label="Upload a video"
+        >
+          Or upload a small file directly
+        </button>
+        <p className="mt-2 text-xs text-neutral-500">
+          Files under 50 MB upload straight through. Larger files get
+          compressed in your browser —{" "}
+          <span className="italic">experimental; may not work for multi-GB files.</span>
+          <button
+            onClick={onToggleHelp}
+            className="ml-1 rounded-full border border-neutral-300 px-1.5 py-0 text-[10px] text-neutral-500 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+            aria-label="How it works"
+            aria-expanded={showHelp}
+          >
+            ?
+          </button>
+        </p>
+
+        {showHelp && (
+          <ol className="mx-auto mt-3 max-w-md space-y-1 rounded-md bg-neutral-50 p-3 text-left text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
+            <li>
+              <strong className="text-neutral-800 dark:text-neutral-200">Small files (&lt;50 MB):</strong>{" "}
+              direct upload via the button above.
+            </li>
+            <li>
+              <strong className="text-neutral-800 dark:text-neutral-200">Everything else:</strong>{" "}
+              run the desktop uploader script. Native ffmpeg compresses +
+              uploads in about a minute for a 3-hour video.
+            </li>
+            <li>
+              <strong className="text-neutral-800 dark:text-neutral-200">Analysis:</strong>{" "}
+              takes 2–5 min after upload lands. You'll see chapters,
+              transcript, and highlights.
+            </li>
+          </ol>
+        )}
+      </div>
     </div>
   );
 }

@@ -13,6 +13,10 @@ export interface PresignUploadResponse {
   path: string;
   /** Short-lived upload token. Pair with `path` in supabase-js `uploadToSignedUrl`. */
   token: string;
+  /** Full Supabase-signed upload URL. PUT the file body directly to this URL
+   *  (no auth headers needed — the token is embedded in the query string).
+   *  Used by the desktop upload script; the web client prefers path+token. */
+  signedUrl: string;
   expiresInSeconds: number;
 }
 

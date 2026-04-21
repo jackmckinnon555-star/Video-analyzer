@@ -32,7 +32,7 @@ export default async (req: Request): Promise<Response> => {
     if (error || !row) throw httpError(500, `DB insert failed: ${error?.message}`);
 
     const storagePath = buildStoragePath(row.id, body.filename);
-    const { path, token } = await createUploadToken(storagePath);
+    const { path, token, signedUrl } = await createUploadToken(storagePath);
 
     await adminClient().from("videos").update({ storage_path: storagePath }).eq("id", row.id);
 
@@ -41,6 +41,7 @@ export default async (req: Request): Promise<Response> => {
       bucket: BUCKET,
       path,
       token,
+      signedUrl,
       expiresInSeconds: EXPIRES,
     };
     return jsonResponse(200, res);

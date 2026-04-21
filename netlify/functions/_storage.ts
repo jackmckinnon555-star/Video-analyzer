@@ -8,20 +8,20 @@ export function buildStoragePath(videoId: string, filename: string): string {
 }
 
 /**
- * Issue a signed upload token scoped to one object path. The browser combines
- * path + token with the Supabase JS client via
- * `supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, file)`, which
- * handles the HTTP method, headers, and CORS correctly — more robust than a
- * hand-rolled XHR PUT to the raw URL.
+ * Issue a signed upload token scoped to one object path. Returns:
+ * - `path` / `token` for the Supabase JS client
+ *   (`supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, file)`)
+ * - `signedUrl` — the full `https://…/storage/v1/object/upload/sign/…?token=…`
+ *   URL for clients that prefer a raw PUT (e.g. the desktop upload script).
  */
 export async function createUploadToken(
   storagePath: string,
-): Promise<{ path: string; token: string }> {
+): Promise<{ path: string; token: string; signedUrl: string }> {
   const { data, error } = await adminClient()
     .storage.from(BUCKET)
     .createSignedUploadUrl(storagePath, { upsert: true });
   if (error || !data) throw new Error(`Signed upload URL failed: ${error?.message}`);
-  return { path: data.path, token: data.token };
+  return { path: data.path, token: data.token, signedUrl: data.signedUrl };
 }
 
 /** Short-lived signed GET URL for the browser <video> element. */
