@@ -20,7 +20,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ---- Constants (must match web/src/lib/compressStreaming.ts) ----
+# ---- Constants (must match desktop/src/ipc.ts) ----
 $SiteBase           = "https://video-analyzer-tra.netlify.app"
 $TargetBytes        = 47 * 1024 * 1024
 $UploadCapBytes     = 50 * 1024 * 1024

@@ -10,7 +10,6 @@ import { useTheme } from "./hooks/useTheme";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const VideoResult = lazy(() => import("./pages/VideoResult"));
 const PublicVideoResult = lazy(() => import("./pages/PublicVideoResult"));
-const Compress = lazy(() => import("./pages/Compress"));
 
 export default function App() {
   // Ensure the theme hook mounts at the app root so the html class is applied
@@ -26,16 +25,14 @@ export default function App() {
 
   // Public routes bypass the password gate:
   //   /p/:slug    read-only share pages
-  //   /compress   browser compressor (100% client-side)
   const path = typeof window !== "undefined" ? window.location.pathname : "";
-  const isPublicRoute = path.startsWith("/p/") || path === "/compress" || path.startsWith("/compress/");
+  const isPublicRoute = path.startsWith("/p/");
 
   if (isPublicRoute) {
     return (
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/p/:slug" element={<PublicVideoResult />} />
-          <Route path="/compress" element={<Compress />} />
         </Routes>
       </Suspense>
     );
@@ -70,17 +67,6 @@ function Header({ unlocked, onLock }: { unlocked: boolean; onLock: () => void })
           <span>Video Analyzer</span>
         </Link>
         <div className="flex items-center gap-2">
-          {unlocked && (
-            <a
-              href="/compress"
-              target="_blank"
-              rel="noopener"
-              className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-              title="Compress a large video before uploading"
-            >
-              Compress
-            </a>
-          )}
           <ThemeToggle />
           {unlocked && (
             <button

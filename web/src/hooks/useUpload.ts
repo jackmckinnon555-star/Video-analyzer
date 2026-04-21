@@ -1,16 +1,9 @@
 import { useRef, useState } from "react";
 import { api } from "../lib/api";
 import { supabase } from "../lib/supabase";
-import {
-  compressStreaming,
-  CompressionCanceledError,
-  STREAM_UPLOAD_CAP_BYTES,
-  type StreamProgress,
-} from "../lib/compressStreaming";
 
 export type UploadPhase =
   | "idle"
-  | "compressing"
   | "presigning"
   | "uploading"
   | "finalizing"
@@ -20,8 +13,8 @@ export type UploadPhase =
 
 export interface UploadState {
   phase: UploadPhase;
+  /** 0..1 — meaningful during "uploading". */
   progress: number;
-  compress: StreamProgress | null;
   originalSizeBytes: number | null;
   finalSizeBytes: number | null;
   error: string | null;
@@ -34,7 +27,6 @@ export interface UploadState {
 const initial: UploadState = {
   phase: "idle",
   progress: 0,
-  compress: null,
   originalSizeBytes: null,
   finalSizeBytes: null,
   error: null,
@@ -43,7 +35,15 @@ const initial: UploadState = {
   file: null,
 };
 
-const COMPRESS_THRESHOLD = 45 * 1024 * 1024;
+/** Supabase Storage enforces a 50 MB cap on signed PUTs for this project. */
+const UPLOAD_CAP_BYTES = 50 * 1024 * 1024;
+
+class UploadCanceledError extends Error {
+  constructor() {
+    super("Upload canceled");
+    this.name = "UploadCanceledError";
+  }
+}
 
 export function useUpload() {
   const [state, setState] = useState<UploadState>(initial);
@@ -53,60 +53,54 @@ export function useUpload() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // For files over the threshold, go straight into compressing. Showing an
-    // "estimating" state tempted us to probe metadata on the main thread,
-    // which froze the tab for multi-GB files. ffmpeg now handles all
-    // metadata detection inside its worker.
-    const startPhase: UploadPhase =
-      file.size > COMPRESS_THRESHOLD ? "compressing" : "presigning";
-    setState({ ...initial, originalSizeBytes: file.size, file, phase: startPhase });
+    setState({
+      ...initial,
+      originalSizeBytes: file.size,
+      file,
+      phase: "presigning",
+    });
 
-    let phaseLabel: "compress" | "presign" | "upload" | "finalize" = "compress";
-    try {
-      let toUpload = file;
-
-      if (file.size > COMPRESS_THRESHOLD) {
-        phaseLabel = "compress";
-        toUpload = await compressStreaming(
-          file,
-          (cp) => setState((s) => ({ ...s, compress: cp, progress: cp.overallProgress })),
-          { signal: controller.signal },
-        );
-      }
-
-      if (toUpload.size > STREAM_UPLOAD_CAP_BYTES) {
-        throw new Error(
-          `Compressed file is ${(toUpload.size / 1024 / 1024).toFixed(1)} MB — above the 50 MB upload cap.`,
-        );
-      }
-
-      phaseLabel = "presign";
+    // Files above the Supabase cap must be compressed before upload.
+    // The desktop uploader handles this in one click; point users there.
+    if (file.size > UPLOAD_CAP_BYTES) {
+      const msg = `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — above the 50 MB browser-upload cap.`;
       setState((s) => ({
         ...s,
-        phase: "presigning",
-        progress: 0,
-        finalSizeBytes: toUpload.size,
+        phase: "error",
+        error: msg,
+        errorHint: "Use the desktop uploader — it compresses on your computer and uploads in one click.",
       }));
+      throw new Error(msg);
+    }
+
+    let phaseLabel: "presign" | "upload" | "finalize" = "presign";
+    try {
       const presign = await api.presignUpload({
-        filename: toUpload.name,
-        contentType: toUpload.type || "application/octet-stream",
-        sizeBytes: toUpload.size,
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
       });
 
-      if (controller.signal.aborted) throw new CompressionCanceledError();
+      if (controller.signal.aborted) throw new UploadCanceledError();
 
       phaseLabel = "upload";
-      setState((s) => ({ ...s, phase: "uploading", videoId: presign.videoId, progress: 0 }));
+      setState((s) => ({
+        ...s,
+        phase: "uploading",
+        videoId: presign.videoId,
+        finalSizeBytes: file.size,
+        progress: 0,
+      }));
       const { error: upErr } = await supabase.storage
         .from(presign.bucket)
-        .uploadToSignedUrl(presign.path, presign.token, toUpload, {
-          contentType: toUpload.type || "application/octet-stream",
+        .uploadToSignedUrl(presign.path, presign.token, file, {
+          contentType: file.type || "application/octet-stream",
           upsert: true,
         });
       if (upErr) throw new Error(`Upload failed: ${upErr.message ?? JSON.stringify(upErr)}`);
       setState((s) => ({ ...s, progress: 1 }));
 
-      if (controller.signal.aborted) throw new CompressionCanceledError();
+      if (controller.signal.aborted) throw new UploadCanceledError();
 
       phaseLabel = "finalize";
       setState((s) => ({ ...s, phase: "finalizing", progress: 1 }));
@@ -118,7 +112,7 @@ export function useUpload() {
       }
       return presign.videoId;
     } catch (err) {
-      if (err instanceof CompressionCanceledError) {
+      if (err instanceof UploadCanceledError) {
         setState((s) => ({ ...s, phase: "canceled" }));
         throw err;
       }
@@ -150,21 +144,9 @@ export function useUpload() {
 
 /** Map common failures to a friendly follow-up action. */
 function recoveryHint(
-  phase: "compress" | "presign" | "upload" | "finalize",
-  message: string,
+  phase: "presign" | "upload" | "finalize",
+  _message: string,
 ): string | null {
-  if (phase === "compress") {
-    if (/stalled/i.test(message)) {
-      return "Try the faster local compression tool.";
-    }
-    if (/unsupported|DRM|metadata/i.test(message)) {
-      return "Try converting the video to MP4 first using HandBrake (free).";
-    }
-    if (/cap|too big|above the/i.test(message)) {
-      return "Try trimming the video to a shorter clip.";
-    }
-    return "Try again, or use the faster local compression tool.";
-  }
   if (phase === "upload") return "Check your internet connection and try again.";
   if (phase === "finalize") return "The file uploaded, but processing didn't start. Click 'Retry' on the video row.";
   return null;

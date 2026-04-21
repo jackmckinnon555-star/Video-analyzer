@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useUpload, type UploadState } from "../hooks/useUpload";
 import { formatBytes } from "../lib/format";
 
@@ -26,7 +26,6 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
   }
 
   const busy =
-    state.phase === "compressing" ||
     state.phase === "presigning" ||
     state.phase === "uploading" ||
     state.phase === "finalizing";
@@ -57,18 +56,6 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
         hidden
         onChange={onChange}
       />
-
-      <div className="mt-4 border-t border-neutral-200 pt-3 text-center text-[11px] text-neutral-400 dark:border-neutral-800">
-        Power users:{" "}
-        <a
-          href="/compress-tool/"
-          target="_blank"
-          rel="noopener"
-          className="underline underline-offset-2 hover:text-neutral-600 dark:hover:text-neutral-300"
-        >
-          10× faster local compression with ffmpeg →
-        </a>
-      </div>
     </div>
   );
 }
@@ -94,7 +81,7 @@ function IdleView({
             <p className="mt-1 text-xs opacity-80">
               Download our desktop uploader. It compresses on your computer
               using native ffmpeg (fast, reliable, any size) and uploads
-              straight to the server. One click, one script, one results page.
+              straight to the server. One click, one installer, one results page.
             </p>
           </div>
           <a
@@ -109,7 +96,7 @@ function IdleView({
         </div>
       </div>
 
-      {/* Secondary: direct browser upload (small files / already-compressed files) */}
+      {/* Secondary: direct browser upload (small files) */}
       <div className="mt-4 text-center">
         <button
           onClick={onClick}
@@ -119,9 +106,7 @@ function IdleView({
           Or upload a small file directly
         </button>
         <p className="mt-2 text-xs text-neutral-500">
-          Files under 50 MB upload straight through. Larger files get
-          compressed in your browser —{" "}
-          <span className="italic">experimental; may not work for multi-GB files.</span>
+          Files up to 50 MB upload straight through in your browser.
           <button
             onClick={onToggleHelp}
             className="ml-1 rounded-full border border-neutral-300 px-1.5 py-0 text-[10px] text-neutral-500 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
@@ -135,13 +120,13 @@ function IdleView({
         {showHelp && (
           <ol className="mx-auto mt-3 max-w-md space-y-1 rounded-md bg-neutral-50 p-3 text-left text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400">
             <li>
-              <strong className="text-neutral-800 dark:text-neutral-200">Small files (&lt;50 MB):</strong>{" "}
-              direct upload via the button above.
+              <strong className="text-neutral-800 dark:text-neutral-200">Small files (≤50 MB):</strong>{" "}
+              upload directly via the button above.
             </li>
             <li>
-              <strong className="text-neutral-800 dark:text-neutral-200">Everything else:</strong>{" "}
-              run the desktop uploader script. Native ffmpeg compresses +
-              uploads in about a minute for a 3-hour video.
+              <strong className="text-neutral-800 dark:text-neutral-200">Larger files:</strong>{" "}
+              use the desktop uploader. Native ffmpeg compresses + uploads
+              in about a minute for a 3-hour video.
             </li>
             <li>
               <strong className="text-neutral-800 dark:text-neutral-200">Analysis:</strong>{" "}
@@ -193,16 +178,12 @@ function ActiveView({
         )}
       </div>
 
-      {state.phase === "compressing" && (
-        <CompressingBody state={state} onCancel={onCancel} />
-      )}
-
       {state.phase === "presigning" && (
         <SimpleBody message="Getting ready to upload…" />
       )}
 
       {state.phase === "uploading" && (
-        <UploadingBody state={state} />
+        <UploadingBody state={state} onCancel={onCancel} />
       )}
 
       {state.phase === "finalizing" && (
@@ -224,66 +205,16 @@ function ActiveView({
   );
 }
 
-const ROTATING_MESSAGES = [
-  "This is normal — your browser is doing real work.",
-  "Keep this tab open, feel free to switch tabs.",
-  "Still going — large files take several minutes.",
-  "Hang tight…",
-];
-
-function CompressingBody({
-  state,
-  onCancel,
-}: {
-  state: UploadState;
-  onCancel: () => void;
-}) {
-  const c = state.compress;
-  const [msgIdx, setMsgIdx] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setMsgIdx((i) => (i + 1) % ROTATING_MESSAGES.length), 4500);
-    return () => clearInterval(id);
-  }, []);
-
-  const pct = Math.round((c?.progress ?? 0) * 100);
-  const etaLabel = c?.etaSeconds != null ? humanDuration(c.etaSeconds) : null;
-  const duration = c?.durationSeconds;
-
-  const primary = (() => {
-    if (!c) return "Starting…";
-    switch (c.phase) {
-      case "loading": return "Getting the compressor ready…";
-      case "mounting": return "Getting your file ready…";
-      case "analyzing": return "Analyzing your video…";
-      case "compressing":
-        return `Shrinking your video… ${pct}%${etaLabel ? ` · about ${etaLabel} left` : ""}`;
-      case "finalizing": return "Almost done — packaging the result…";
-      default: return "Working…";
-    }
-  })();
-
+function UploadingBody({ state, onCancel }: { state: UploadState; onCancel: () => void }) {
+  const pct = Math.round((state.progress ?? 0) * 100);
   return (
     <div className="mt-3 space-y-2">
-      <ProgressBar progress={c?.overallProgress ?? 0.05} />
-      <p className="text-sm font-medium">{primary}</p>
-
-      {duration != null && c?.phase === "compressing" && (
-        <p className="text-xs text-neutral-500">
-          <strong>{humanDuration(duration)}</strong> of{" "}
-          {c.mode === "audio-only" ? "audio" : "video"} → ~{" "}
-          <strong>{formatBytes(47 * 1024 * 1024)}</strong> output
+      <ProgressBar progress={state.progress ?? 0} />
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">
+          Uploading… {pct}%
+          {state.finalSizeBytes ? ` (${formatBytes(state.finalSizeBytes)})` : ""}
         </p>
-      )}
-
-      {/* Rotating reassurance line */}
-      <p className="text-xs text-neutral-500">{ROTATING_MESSAGES[msgIdx]}</p>
-
-      {/* Live log tail during the slow analysis phase — proves the worker is alive */}
-      {c?.phase === "analyzing" && c.message && (
-        <p className="truncate font-mono text-[10px] text-neutral-400">{c.message}</p>
-      )}
-
-      <div className="flex justify-end pt-1">
         <button
           onClick={onCancel}
           className="rounded-md border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
@@ -291,19 +222,6 @@ function CompressingBody({
           Cancel
         </button>
       </div>
-    </div>
-  );
-}
-
-function UploadingBody({ state }: { state: UploadState }) {
-  const pct = Math.round((state.progress ?? 0) * 100);
-  return (
-    <div className="mt-3 space-y-2">
-      <ProgressBar progress={state.progress ?? 0} />
-      <p className="text-sm font-medium">
-        Uploading… {pct}%
-        {state.finalSizeBytes ? ` (${formatBytes(state.finalSizeBytes)})` : ""}
-      </p>
     </div>
   );
 }
@@ -363,7 +281,7 @@ function ErrorBody({ state, onReset }: { state: UploadState; onReset: () => void
           rel="noopener"
           className="rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
         >
-          Faster local tool →
+          Desktop uploader →
         </a>
       </div>
     </div>
@@ -388,15 +306,4 @@ function ProgressBar({ progress }: { progress: number }) {
       />
     </div>
   );
-}
-
-function humanDuration(seconds: number): string {
-  if (seconds < 1) return "a moment";
-  if (seconds < 60) return `${Math.round(seconds)} sec`;
-  const m = Math.floor(seconds / 60);
-  if (m < 60) return m === 1 ? "1 minute" : `${m} minutes`;
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  if (mm === 0) return h === 1 ? "1 hour" : `${h} hours`;
-  return `${h}h ${mm}m`;
 }
