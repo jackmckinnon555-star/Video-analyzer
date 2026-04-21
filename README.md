@@ -7,7 +7,7 @@ A small-team web app that takes a long-form video upload and returns an AI-gener
 - **Storage**: Cloudflare R2 (direct-to-storage presigned uploads)
 - **DB + realtime**: Supabase
 - **Worker**: GitHub Actions (6-hour runtime) — a Modal GPU adapter is in `/worker-modal` for the optional speed boost
-- **Transcription**: Groq Whisper v3 primary, `faster-whisper` CPU fallback in-runner
+- **Transcription**: Groq Whisper v3 primary, Cloudflare Workers AI (`@cf/openai/whisper`) fallback
 - **Analysis**: Gemini 2.5 Flash (map-reduce over transcript + sampled frames)
 
 ## One-time setup
@@ -128,7 +128,7 @@ Browser                    Netlify Functions              GHA Worker
 ## Free-tier reality check
 
 - **R2**: 10 GB cap. Raw videos are deleted after processing; only transcript + chapter JSON is kept. A 2-hour 1080p MP4 is 2–6 GB, so **do not skip the cleanup step**.
-- **Groq Whisper**: ~8 hours of audio/day. On exhaustion the worker falls back to `faster-whisper` running inside the GHA runner (CPU, ~2–4× realtime with the `small` model).
+- **Groq Whisper**: ~8 hours of audio/day. On exhaustion the worker falls back to Cloudflare Workers AI (`@cf/openai/whisper`, 10k neurons/day free).
 - **Gemini Flash**: generous RPM but has a daily cap; map-reduce keeps each call small. Pro is no longer free (as of April 2026).
 - **Supabase**: 500 MB Postgres, auto-pauses after 7 days idle (weekly keepalive ping handles this).
 - **GHA**: 2,000 min/mo on private repos, unlimited on public. Make the repo public if you expect >25 two-hour videos/month.

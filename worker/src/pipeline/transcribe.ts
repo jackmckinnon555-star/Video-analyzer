@@ -5,15 +5,13 @@ import type { TranscriptSegment } from "../../../shared/types/video.js";
 import type { AudioChunk } from "./extractAudio.js";
 import { transcribeChunkGroq, type ChunkResult } from "./transcribeGroq.js";
 import { transcribeChunkCloudflare } from "./transcribeCloudflare.js";
-import { transcribeChunkLocal } from "./transcribeLocal.js";
 
-type BackendName = "groq" | "cloudflare" | "local";
+type BackendName = "groq" | "cloudflare";
 type BackendFn = (chunk: AudioChunk) => Promise<ChunkResult>;
 
 const BACKENDS: Record<BackendName, BackendFn> = {
   groq: transcribeChunkGroq,
   cloudflare: transcribeChunkCloudflare,
-  local: transcribeChunkLocal,
 };
 
 export interface TranscribeResult {
@@ -108,8 +106,8 @@ async function transcribeOneChunk(
 }
 
 function getPreference(): BackendName[] {
-  const raw = envOptional("TRANSCRIBE_PREFERENCE") ?? "groq,cloudflare,local";
-  const known: BackendName[] = ["groq", "cloudflare", "local"];
+  const raw = envOptional("TRANSCRIBE_PREFERENCE") ?? "groq,cloudflare";
+  const known: BackendName[] = ["groq", "cloudflare"];
   return raw
     .split(",")
     .map((s) => s.trim())

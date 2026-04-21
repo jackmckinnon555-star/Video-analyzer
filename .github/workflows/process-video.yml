@@ -28,15 +28,8 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Install system ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Install faster-whisper (fallback transcription)
-        run: pip install --no-cache-dir faster-whisper==1.0.3
 
       # Install at the root so npm workspaces resolves shared/ correctly.
       - name: Install deps (root workspaces)
@@ -58,6 +51,5 @@ jobs:
           ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
           RESEND_FROM: ${{ secrets.RESEND_FROM }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
-          TRANSCRIBE_PREFERENCE: ${{ vars.TRANSCRIBE_PREFERENCE || 'groq,cloudflare,local' }}
-          WHISPER_LOCAL_MODEL: ${{ vars.WHISPER_LOCAL_MODEL || 'small' }}
+          TRANSCRIBE_PREFERENCE: ${{ vars.TRANSCRIBE_PREFERENCE || 'groq,cloudflare' }}
         run: npm start
