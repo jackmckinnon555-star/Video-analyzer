@@ -40,21 +40,24 @@ jobs:
       - name: Build web bundle
         run: npm --workspace web run build
 
-      # Use the dedicated action; netlify-cli@26 errors out at the repo root
-      # when it detects npm workspaces and refuses to deploy without an
-      # explicit project selection. The action talks to the deploy API
-      # directly and avoids that prompt.
+      # nwtgck/actions-netlify@v3 doesn't run netlify-cli's function bundler,
+      # so it ships .ts sources as-is and Netlify drops them — every deploy
+      # via that action stripped all 16 functions. netlify-cli@26 added a
+      # workspace-detection prompt at the repo root that breaks
+      # non-interactive use, BUT it works fine when invoked from web/
+      # (no netlify.toml visible to confuse it; --dir + --functions point
+      # at absolute paths that Netlify resolves through the repo's
+      # netlify.toml).
       - name: Deploy to Netlify production
-        uses: nwtgck/actions-netlify@v3.0
-        with:
-          publish-dir: web/dist
-          functions-dir: netlify/functions
-          production-deploy: true
-          deploy-message: "GHA deploy from ${{ github.sha }}"
-          enable-pull-request-comment: false
-          enable-commit-comment: false
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: web
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          npx --yes netlify-cli@latest deploy \
+            --prod \
+            --no-build \
+            --dir="${GITHUB_WORKSPACE}/web/dist" \
+            --functions="${GITHUB_WORKSPACE}/netlify/functions" \
+            --site="${{ secrets.NETLIFY_SITE_ID }}" \
+            --message="GHA deploy from ${{ github.sha }}"
         timeout-minutes: 10
