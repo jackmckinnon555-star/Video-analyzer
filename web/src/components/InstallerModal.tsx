@@ -8,19 +8,19 @@ const INSTALLERS = [
   {
     os: "Windows 10 / 11",
     name: "TRA Video Uploader.exe",
-    href: `${RELEASES_BASE}/TRA%20Video%20Uploader-win-x64.exe`,
+    href: `${RELEASES_BASE}/TRA.Video.Uploader-win-x64.exe`,
     meta: "~120 MB · per-user install",
   },
   {
     os: "macOS · Apple Silicon",
     name: "TRA Video Uploader.dmg",
-    href: `${RELEASES_BASE}/TRA%20Video%20Uploader-mac-arm64.dmg`,
+    href: `${RELEASES_BASE}/TRA.Video.Uploader-mac-arm64.dmg`,
     meta: "M1 / M2 / M3 / M4",
   },
   {
     os: "macOS · Intel",
     name: "TRA Video Uploader.dmg",
-    href: `${RELEASES_BASE}/TRA%20Video%20Uploader-mac-x64.dmg`,
+    href: `${RELEASES_BASE}/TRA.Video.Uploader-mac-x64.dmg`,
     meta: "2019 Intel Macs",
   },
 ] as const;
