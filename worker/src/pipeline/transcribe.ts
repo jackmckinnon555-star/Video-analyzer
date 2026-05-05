@@ -18,6 +18,8 @@ export interface TranscribeResult {
   segments: TranscriptSegment[];
   language: string | null;
   coverageRatio: number;
+  /** Single backend name if all chunks used the same one, "mixed" otherwise. */
+  backend: string;
 }
 
 /**
@@ -38,28 +40,32 @@ export async function transcribeAll(
 
   const all: TranscriptSegment[] = [];
   let detectedLanguage: string | null = null;
+  const backendsUsed = new Set<BackendName>();
 
   for (const [i, chunk] of chunks.entries()) {
     if (onProgress) await onProgress(i + 1, chunks.length);
-    const result = await transcribeOneChunk(chunk, pref, i + 1, chunks.length);
+    const { result, backend } = await transcribeOneChunk(chunk, pref, i + 1, chunks.length);
+    backendsUsed.add(backend);
     all.push(...result.segments);
     if (!detectedLanguage && result.language) detectedLanguage = result.language;
   }
 
   const merged = mergeAndDedupe(all);
   const coverageRatio = coverage(merged, totalDurationSeconds);
+  const backend = backendsUsed.size === 1 ? [...backendsUsed][0]! : "mixed";
   log.info("transcription complete", {
     segmentCount: merged.length,
     language: detectedLanguage,
     coverageRatio: Number(coverageRatio.toFixed(3)),
     durationSeconds: totalDurationSeconds,
+    backend,
   });
   if (coverageRatio < 0.95 && totalDurationSeconds > 60) {
     log.warn("transcript coverage below 95% — possible gaps or silent sections", {
       coverageRatio,
     });
   }
-  return { segments: merged, language: detectedLanguage, coverageRatio };
+  return { segments: merged, language: detectedLanguage, coverageRatio, backend };
 }
 
 async function transcribeOneChunk(
@@ -67,9 +73,9 @@ async function transcribeOneChunk(
   pref: BackendName[],
   index: number,
   total: number,
-): Promise<ChunkResult> {
+): Promise<{ result: ChunkResult; backend: BackendName }> {
   let lastErr: unknown;
-  let emptyFallback: ChunkResult | null = null;
+  let emptyFallback: { result: ChunkResult; backend: BackendName } | null = null;
   for (const backend of pref) {
     const fn = BACKENDS[backend];
     if (!fn) {
@@ -82,10 +88,10 @@ async function transcribeOneChunk(
       if (result.segments.length === 0 && chunk.durationSeconds > 5) {
         // Suspicious empty transcript — try the next backend but remember
         // this result so we can fall back to empty if every backend agrees.
-        emptyFallback = result;
+        emptyFallback = { result, backend };
         throw new Error("empty transcript for non-trivial chunk");
       }
-      return result;
+      return { result, backend };
     } catch (err) {
       lastErr = err;
       log.warn("chunk backend failed, trying next", {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { verifySitePassword, adminClient, jsonResponse, errorResponse, httpError } from "./_auth.js";
 import type { FinalizeUploadResponse } from "../../shared/types/api.js";
+import { sendFailureAlert } from "../../shared/lib/alert.js";
 
 const BodySchema = z.object({
   videoId: z.string().uuid(),
@@ -34,6 +35,13 @@ export default async (req: Request): Promise<Response> => {
         .from("videos")
         .update({ status: "failed", error: `dispatch: ${dispatchError}` })
         .eq("id", videoId);
+      // Fire-and-forget — alert fan-out errors must not mask the upload's own state.
+      sendFailureAlert({
+        videoId,
+        phase: "dispatch",
+        error: dispatchError,
+        detailUrl: `https://${process.env.URL?.replace(/^https?:\/\//, "") ?? "video-analyzer-tra.netlify.app"}/video/${videoId}`,
+      }).catch((e) => console.warn("[finalize] alert fan-out failed:", String(e)));
       const res: FinalizeUploadResponse = {
         ok: true,
         status: "dispatch_failed",

@@ -33,11 +33,14 @@ jobs:
           MB() { printf "%.1f MB" "$(echo "$1 / 1048576" | bc -l)"; }
           echo "Initial bundle: $(MB $INITIAL) (${INITIAL} B)"
           echo "Total JS:       $(MB $TOTAL) (${TOTAL} B)"
-          if [ "$INITIAL" -gt 524288 ]; then
-            echo "::error::Initial bundle exceeds 512 KB ($(MB $INITIAL))"
+          # Budgets tightened after the ffmpeg.wasm removal — live initial
+          # bundle is ~199 KB, so 256 KB catches regressions from a heavy
+          # dep sneaking back in without rejecting normal growth.
+          if [ "$INITIAL" -gt 262144 ]; then
+            echo "::error::Initial bundle exceeds 256 KB ($(MB $INITIAL))"
             exit 1
           fi
-          if [ "$TOTAL" -gt 2097152 ]; then
-            echo "::error::Total JS exceeds 2 MB ($(MB $TOTAL))"
+          if [ "$TOTAL" -gt 1048576 ]; then
+            echo "::error::Total JS exceeds 1 MB ($(MB $TOTAL))"
             exit 1
           fi

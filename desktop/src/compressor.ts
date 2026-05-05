@@ -163,6 +163,26 @@ export async function compressAndUpload(
     const outName = path.basename(outPath);
     const contentType = finalInfo.mode === "audio-only" ? "audio/mp4" : "video/mp4";
 
+    // Pre-validate the compressed file: probe it and confirm it has a
+    // duration (and an audio stream when expected). Catches "ffmpeg
+    // exited 0 but produced something the worker can't transcribe"
+    // before we burn the upload and round-trip to the worker.
+    const outMeta = await runFfprobeMeta(outPath).catch((err) => {
+      throw new Error(
+        `Compressed output is malformed (ffprobe couldn't read it): ${err instanceof Error ? err.message : err}. Try a different source file.`,
+      );
+    });
+    if (!outMeta.durationSeconds || outMeta.durationSeconds <= 0) {
+      throw new Error(
+        "Compressed output has no readable duration. The encode may have failed silently — try a different source file.",
+      );
+    }
+    if (finalInfo.hasAudio && !outMeta.hasAudio) {
+      throw new Error(
+        "Compressed output lost its audio track. Source codec may be unusual — try converting to MP4 first with HandBrake.",
+      );
+    }
+
     // ─── Late-presign so the signed-URL token is fresh ───────────────
     onProgress({
       phase: "uploading",
@@ -247,14 +267,16 @@ async function compressWithFit(
   ctx: RunContext,
 ): Promise<{ outPath: string; info: ProbeResult }> {
   let info = initialInfo;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const outExt = info.mode === "audio-only" ? ".m4a" : ".mp4";
     const baseName =
       path.basename(info.filename, path.extname(info.filename)) +
       "-compressed" +
       outExt;
-    const outPath = path.join(tmpDir, attempt === 0 ? baseName : `retry-${baseName}`);
+    const outPath = path.join(tmpDir, attempt === 1 ? baseName : `retry-${attempt}-${baseName}`);
 
+    const passLabel = MAX_ATTEMPTS > 1 && attempt > 1 ? ` · pass ${attempt}/${MAX_ATTEMPTS}` : "";
     await runCompress(
       info,
       outPath,
@@ -265,7 +287,7 @@ async function compressWithFit(
           overallProgress: 0.05 + p * 0.75,
           mode: info.mode,
           etaSeconds,
-          message: `${Math.round(p * 100)}% · ${info.mode === "audio-only" ? `audio @ ${info.audioKbps} kbps` : "video"}`,
+          message: `${Math.round(p * 100)}% · ${info.mode === "audio-only" ? `audio @ ${info.audioKbps} kbps` : "video"}${passLabel}`,
         });
       },
       ctx,
@@ -280,7 +302,7 @@ async function compressWithFit(
       info.audioKbps as (typeof AUDIO_BITRATE_LADDER_KBPS)[number],
     );
     const next = AUDIO_BITRATE_LADDER_KBPS[currentIdx + 1];
-    if (currentIdx === -1 || next == null || attempt === 1) {
+    if (currentIdx === -1 || next == null || attempt === MAX_ATTEMPTS) {
       throw new Error(
         `Compressed file is ${(size / 1024 / 1024).toFixed(1)} MB — still above the 50 MB upload cap even at the lowest bitrate. Try trimming the source.`,
       );
@@ -289,7 +311,7 @@ async function compressWithFit(
       phase: "compressing",
       progress: 0,
       overallProgress: 0.05,
-      message: `Output overshot — retrying at ${next} kbps audio`,
+      message: `Output overshot — retrying pass 2/2 at ${next} kbps audio`,
     });
     info = { ...info, mode: "audio-only", audioKbps: next, videoKbps: undefined };
     try {

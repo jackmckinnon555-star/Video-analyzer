@@ -60,6 +60,17 @@ export async function saveLanguage(videoId: string, language: string): Promise<v
   if (error) throw error;
 }
 
+export async function saveTranscribeBackend(
+  videoId: string,
+  backend: string,
+): Promise<void> {
+  const { error } = await sb()
+    .from("videos")
+    .update({ transcribe_backend: backend })
+    .eq("id", videoId);
+  if (error) throw error;
+}
+
 export async function savePreviewPath(videoId: string, storagePath: string): Promise<void> {
   const { error } = await sb()
     .from("videos")

@@ -74,6 +74,8 @@ export interface Video {
   show_notes: string | null;
   translations: Record<string, TranscriptSegment[]> | null;
   public_slug: string | null;
+  /** Which transcription backend(s) succeeded — "groq", "cloudflare", or "mixed". */
+  transcribe_backend: string | null;
   error: string | null;
   dispatched_at: string | null;
   created_at: string;

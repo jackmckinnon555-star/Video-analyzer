@@ -20,6 +20,7 @@ import {
   saveThumbnailUrl,
   saveLanguage,
   savePreviewPath,
+  saveTranscribeBackend,
   setProgress,
   getVideo,
   markFailed,
@@ -82,7 +83,7 @@ async function main(): Promise<void> {
 
     // 4. Transcribe with per-chunk fallback (Groq → Cloudflare AI → local whisper).
     const audioChunks = await chunkAudio(audioPath, duration, workDir);
-    const { segments, language, coverageRatio } = await transcribeAll(
+    const { segments, language, coverageRatio, backend } = await transcribeAll(
       audioChunks,
       duration,
       (i, total) =>
@@ -95,10 +96,12 @@ async function main(): Promise<void> {
     );
     await saveTranscript(videoId, segments);
     if (language) await saveLanguage(videoId, language);
+    await saveTranscribeBackend(videoId, backend);
     log.info("transcript saved", {
       segmentCount: segments.length,
       language,
       coverageRatio: Number(coverageRatio.toFixed(3)),
+      backend,
     });
 
     // 5. Analyze with Gemini Flash (map-reduce).
