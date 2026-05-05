@@ -9,19 +9,16 @@ export function useVideos() {
   const query = useQuery<Video[]>({
     queryKey: ["videos"],
     queryFn: async () => {
-      // Fetch everything, then hide children of multi-part uploads
-      // client-side. We filter in JS rather than via `.is(parent_video_id,
-      // null)` so the dashboard keeps working on databases that haven't
-      // applied migration 0009 yet — PostgREST 400s on the WHERE clause
-      // when the column doesn't exist, but `select("*")` is fine because
-      // it expands server-side.
+      // Hide child parts of multi-part uploads — only the parent (or
+      // standalones) shows in the dashboard. The parent's row carries the
+      // stitched results once processing completes.
       const { data, error } = await supabase
         .from("videos")
         .select("*")
+        .is("parent_video_id", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const rows = (data ?? []) as Video[];
-      return rows.filter((v) => !v.parent_video_id);
+      return (data ?? []) as Video[];
     },
   });
 
