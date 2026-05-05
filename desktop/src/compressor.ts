@@ -12,8 +12,16 @@ import {
   UPLOAD_CAP_BYTES,
   VIDEO_MAX_WIDTH,
   type JobProgress,
+  type PartPlan,
   type ProbeResult,
 } from "./ipc.js";
+
+/** When a source's duration exceeds this, we split into segments. Picked so
+ *  that each segment fits comfortably at 16 kbps audio-only (7.3 hr ceiling)
+ *  with margin — better quality than forcing the whole file to 8 kbps. */
+const SEGMENT_SECONDS = 6 * 60 * 60; // 6 hours
+/** Lower bound for triggering segmentation: just past the 8 kbps ceiling. */
+const SPLIT_THRESHOLD_SECONDS = 14 * 60 * 60; // 14 hr
 
 // ffmpeg-static / ffprobe-static ship compiled binaries but their paths point
 // into node_modules, which moves inside the asar archive when packaged. We
@@ -40,8 +48,15 @@ function pickAudioBitrate(durationSeconds: number, capBytes = UPLOAD_CAP_BYTES):
     const bytes = (kbps * 1000 * durationSeconds) / 8;
     if (bytes <= capBytes) return kbps;
   }
-  // Even 8 kbps can't fit — would need to trim or split.
+  // Even 8 kbps can't fit — caller should split into parts instead.
   return null;
+}
+
+/** Compute a multi-part plan if the source is too long for the audio-only ladder. */
+function planParts(durationSeconds: number): PartPlan | null {
+  if (durationSeconds <= SPLIT_THRESHOLD_SECONDS) return null;
+  const totalParts = Math.ceil(durationSeconds / SEGMENT_SECONDS);
+  return { totalParts, segmentSeconds: SEGMENT_SECONDS };
 }
 
 /** Fast metadata probe via ffprobe. Reads only container headers (with a roomy analyzeduration). */
@@ -53,10 +68,39 @@ export async function probe(filepath: string): Promise<ProbeResult> {
     throw new Error("Couldn't read video duration. The file may be corrupted or not a media file.");
   }
   const duration = meta.durationSeconds;
+
+  // Very long source → plan to split into ~6 hr segments. Each segment then
+  // probes/compresses normally on its own.
+  const partPlan = planParts(duration);
+  if (partPlan) {
+    // For multi-part, the per-part bitrate decision happens after the split.
+    // We still report a placeholder mode/bitrate so the renderer can describe
+    // the upcoming work.
+    const segmentDuration = partPlan.segmentSeconds;
+    const segmentAudioKbps = pickAudioBitrate(segmentDuration) ?? AUDIO_BITRATE_LADDER_KBPS[0];
+    return {
+      filename: path.basename(filepath),
+      filepath,
+      sizeBytes: stat.size,
+      durationSeconds: duration,
+      mode: "audio-only",
+      audioKbps: segmentAudioKbps,
+      videoKbps: undefined,
+      hasAudio: meta.hasAudio,
+      targetSizeBytes: TARGET_BYTES,
+      // Per-part realtime factor × number of parts, plus stream-copy split
+      // overhead (~1 min per part).
+      estimatedSeconds: Math.ceil((duration / 4) + partPlan.totalParts * 60),
+      partPlan,
+    };
+  }
+
   const audioKbps = pickAudioBitrate(duration);
   if (audioKbps == null) {
+    // Should be unreachable thanks to planParts, but defend against future
+    // changes to the constants.
     throw new Error(
-      `This file is too long to fit under 50 MB even as compressed audio (~${humanDuration(duration)}). Trim it first or split into multiple files.`,
+      `This file is too long to fit under 50 MB even as compressed audio (~${humanDuration(duration)}). Trim it first.`,
     );
   }
 
@@ -143,6 +187,14 @@ export async function compressAndUpload(
   ctx: RunContext,
 ): Promise<{ videoId: string; resultUrl: string }> {
   const initialInfo = await probe(filepath);
+
+  // Multi-part path: source is too long for the audio-only ladder. Split via
+  // ffmpeg stream-copy into ~6 hr segments, then run the normal single-file
+  // compress/upload on each.
+  if (initialInfo.partPlan) {
+    return compressAndUploadParts(initialInfo, baseUrl, password, onProgress, ctx);
+  }
+
   onProgress({
     phase: "probing",
     progress: 1,
@@ -154,79 +206,12 @@ export async function compressAndUpload(
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tra-uploader-"));
 
   try {
-    // ─── Compress (with one bitrate-step-down retry if oversized) ────
-    const { outPath, info: finalInfo } = await compressWithFit(initialInfo, tmpDir, onProgress, ctx);
-
-    if (ctx.canceled) throw new Error("canceled");
-
-    const outSize = fs.statSync(outPath).size;
-    const outName = path.basename(outPath);
-    const contentType = finalInfo.mode === "audio-only" ? "audio/mp4" : "video/mp4";
-
-    // Pre-validate the compressed file: probe it and confirm it has a
-    // duration (and an audio stream when expected). Catches "ffmpeg
-    // exited 0 but produced something the worker can't transcribe"
-    // before we burn the upload and round-trip to the worker.
-    const outMeta = await runFfprobeMeta(outPath).catch((err) => {
-      throw new Error(
-        `Compressed output is malformed (ffprobe couldn't read it): ${err instanceof Error ? err.message : err}. Try a different source file.`,
-      );
+    const { videoId } = await compressAndUploadOne(initialInfo, tmpDir, baseUrl, password, onProgress, ctx, {
+      compressStart: 0.05,
+      compressEnd: 0.80,
+      uploadStart: 0.82,
+      uploadEnd: 0.96,
     });
-    if (!outMeta.durationSeconds || outMeta.durationSeconds <= 0) {
-      throw new Error(
-        "Compressed output has no readable duration. The encode may have failed silently — try a different source file.",
-      );
-    }
-    if (finalInfo.hasAudio && !outMeta.hasAudio) {
-      throw new Error(
-        "Compressed output lost its audio track. Source codec may be unusual — try converting to MP4 first with HandBrake.",
-      );
-    }
-
-    // ─── Late-presign so the signed-URL token is fresh ───────────────
-    onProgress({
-      phase: "uploading",
-      progress: 0,
-      overallProgress: 0.82,
-      message: "Reserving upload slot…",
-    });
-    const presign = await fetchJson<{ videoId: string; signedUrl: string }>(
-      `${baseUrl}/api/presign-upload`,
-      {
-        method: "POST",
-        headers: {
-          "X-Site-Password": password,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ filename: outName, contentType, sizeBytes: outSize }),
-      },
-    );
-
-    if (ctx.canceled) throw new Error("canceled");
-
-    // ─── PUT to signed URL with retry ────────────────────────────────
-    await streamedPutWithRetry(
-      presign.signedUrl,
-      outPath,
-      outSize,
-      contentType,
-      (p, attempt) => {
-        onProgress({
-          phase: "uploading",
-          progress: p,
-          overallProgress: 0.82 + p * 0.14,
-          message:
-            attempt > 1
-              ? `Uploading… ${Math.round(p * 100)}% (retry ${attempt}/${UPLOAD_MAX_ATTEMPTS})`
-              : `Uploading… ${Math.round(p * 100)}%`,
-          attempt,
-          maxAttempts: UPLOAD_MAX_ATTEMPTS,
-        });
-      },
-      ctx,
-    );
-
-    if (ctx.canceled) throw new Error("canceled");
 
     // ─── Finalize ────────────────────────────────────────────────────
     onProgress({
@@ -241,12 +226,12 @@ export async function compressAndUpload(
         "X-Site-Password": password,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ videoId: presign.videoId }),
+      body: JSON.stringify({ videoId }),
     });
 
-    const resultUrl = `${baseUrl}/video/${presign.videoId}`;
+    const resultUrl = `${baseUrl}/video/${videoId}`;
     onProgress({ phase: "done", progress: 1, overallProgress: 1, message: "Done" });
-    return { videoId: presign.videoId, resultUrl };
+    return { videoId, resultUrl };
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -254,6 +239,326 @@ export async function compressAndUpload(
       /* ignore */
     }
   }
+}
+
+interface ProgressBudget {
+  /** 0..1 overall progress where the compress phase starts. */
+  compressStart: number;
+  /** 0..1 overall progress where the compress phase ends. */
+  compressEnd: number;
+  uploadStart: number;
+  uploadEnd: number;
+}
+
+/**
+ * Compress + presign + upload a single file. Returns the videoId. Does NOT
+ * call /api/finalize-upload — the caller decides when to finalize (and
+ * whether to bundle multiple parts via the childIds field).
+ */
+async function compressAndUploadOne(
+  inputInfo: ProbeResult,
+  tmpDir: string,
+  baseUrl: string,
+  password: string,
+  onProgress: ProgressSink,
+  ctx: RunContext,
+  budget: ProgressBudget,
+): Promise<{ videoId: string }> {
+  // ─── Compress (with one bitrate-step-down retry if oversized) ────
+  const compressSpan = budget.compressEnd - budget.compressStart;
+  const { outPath, info: finalInfo } = await compressWithFit(
+    inputInfo,
+    tmpDir,
+    (p) => {
+      // p is the inner phase progress (0..1 within compress); map to overall budget.
+      const remapped: JobProgress = {
+        ...p,
+        overallProgress: budget.compressStart + (p.progress ?? 0) * compressSpan,
+      };
+      onProgress(remapped);
+    },
+    ctx,
+  );
+
+  if (ctx.canceled) throw new Error("canceled");
+
+  const outSize = fs.statSync(outPath).size;
+  const outName = path.basename(outPath);
+  const contentType = finalInfo.mode === "audio-only" ? "audio/mp4" : "video/mp4";
+
+  // Pre-validate the compressed file (defense vs. silent ffmpeg failures).
+  const outMeta = await runFfprobeMeta(outPath).catch((err) => {
+    throw new Error(
+      `Compressed output is malformed (ffprobe couldn't read it): ${err instanceof Error ? err.message : err}. Try a different source file.`,
+    );
+  });
+  if (!outMeta.durationSeconds || outMeta.durationSeconds <= 0) {
+    throw new Error(
+      "Compressed output has no readable duration. The encode may have failed silently — try a different source file.",
+    );
+  }
+  if (finalInfo.hasAudio && !outMeta.hasAudio) {
+    throw new Error(
+      "Compressed output lost its audio track. Source codec may be unusual — try converting to MP4 first with HandBrake.",
+    );
+  }
+
+  // ─── Late-presign so the signed-URL token is fresh ───────────────
+  onProgress({
+    phase: "uploading",
+    progress: 0,
+    overallProgress: budget.uploadStart,
+    message: "Reserving upload slot…",
+  });
+  const presign = await fetchJson<{ videoId: string; signedUrl: string }>(
+    `${baseUrl}/api/presign-upload`,
+    {
+      method: "POST",
+      headers: {
+        "X-Site-Password": password,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ filename: outName, contentType, sizeBytes: outSize }),
+    },
+  );
+
+  if (ctx.canceled) throw new Error("canceled");
+
+  // ─── PUT to signed URL with retry ────────────────────────────────
+  const uploadSpan = budget.uploadEnd - budget.uploadStart;
+  await streamedPutWithRetry(
+    presign.signedUrl,
+    outPath,
+    outSize,
+    contentType,
+    (p, attempt) => {
+      onProgress({
+        phase: "uploading",
+        progress: p,
+        overallProgress: budget.uploadStart + p * uploadSpan,
+        message:
+          attempt > 1
+            ? `Uploading… ${Math.round(p * 100)}% (retry ${attempt}/${UPLOAD_MAX_ATTEMPTS})`
+            : `Uploading… ${Math.round(p * 100)}%`,
+        attempt,
+        maxAttempts: UPLOAD_MAX_ATTEMPTS,
+      });
+    },
+    ctx,
+  );
+
+  if (ctx.canceled) throw new Error("canceled");
+  return { videoId: presign.videoId };
+}
+
+/**
+ * Multi-part orchestrator. Stream-copies the source into N segments, then
+ * runs the per-file compress/upload on each. After all parts have uploaded,
+ * fires a single /api/finalize-upload call with childIds linking parts 2..N
+ * to part 1 (the parent). The worker then sees the parent and gathers all
+ * siblings as one logical job.
+ */
+async function compressAndUploadParts(
+  initialInfo: ProbeResult,
+  baseUrl: string,
+  password: string,
+  onProgress: ProgressSink,
+  ctx: RunContext,
+): Promise<{ videoId: string; resultUrl: string }> {
+  const plan = initialInfo.partPlan!;
+  const N = plan.totalParts;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tra-uploader-parts-"));
+
+  onProgress({
+    phase: "probing",
+    progress: 1,
+    overallProgress: 0.02,
+    mode: "audio-only",
+    message: `${humanDuration(initialInfo.durationSeconds)} source · splitting into ${N} parts`,
+  });
+
+  try {
+    // Each part gets an equal slice of the [0.05, 0.97] progress range
+    // (post-probe to pre-finalize). Split that equally across parts, with
+    // ~10% of the per-part budget for the stream-copy split itself.
+    const partsTotalSpan = 0.92; // 0.97 - 0.05
+    const partSpan = partsTotalSpan / N;
+
+    const childIds: string[] = [];
+    let parentVideoId = "";
+
+    for (let i = 0; i < N; i++) {
+      if (ctx.canceled) throw new Error("canceled");
+      const partNumber = i + 1;
+      const partBase = 0.05 + i * partSpan;
+      const partStartSec = i * plan.segmentSeconds;
+      const partDurSec = Math.min(plan.segmentSeconds, initialInfo.durationSeconds - partStartSec);
+
+      // ─── Stream-copy split (fast — seconds even for huge files) ─
+      onProgress({
+        phase: "compressing",
+        progress: 0,
+        overallProgress: partBase,
+        message: `Part ${partNumber} of ${N}: extracting segment…`,
+      });
+      const splitPath = path.join(tmpDir, `part-${partNumber}.mkv`);
+      await runStreamCopySplit(initialInfo.filepath, partStartSec, partDurSec, splitPath, ctx);
+      if (ctx.canceled) throw new Error("canceled");
+
+      // Probe the split segment to get its true duration + audio/video flags.
+      const splitMeta = await runFfprobeMeta(splitPath);
+      if (!splitMeta.durationSeconds || splitMeta.durationSeconds <= 0) {
+        throw new Error(`Part ${partNumber} extraction produced an unreadable file.`);
+      }
+      const segDur = splitMeta.durationSeconds;
+      const audioKbps = pickAudioBitrate(segDur) ?? AUDIO_BITRATE_LADDER_KBPS[0]!;
+      const totalBudgetBits = TARGET_BYTES * 8;
+      const audioBudgetBits = audioKbps * 1000 * segDur;
+      const videoBudgetBits = totalBudgetBits - audioBudgetBits;
+      const videoKbps = Math.max(0, Math.floor(videoBudgetBits / segDur / 1000));
+      const audioOnly = videoKbps < MIN_VIDEO_BITRATE_KBPS;
+      const segMode: "video" | "audio-only" = !splitMeta.hasVideo
+        ? "audio-only"
+        : audioOnly
+          ? "audio-only"
+          : "video";
+      const segInfo: ProbeResult = {
+        filename: `${path.basename(initialInfo.filename, path.extname(initialInfo.filename))}-part${partNumber}of${N}${path.extname(splitPath)}`,
+        filepath: splitPath,
+        sizeBytes: fs.statSync(splitPath).size,
+        durationSeconds: segDur,
+        mode: segMode,
+        audioKbps,
+        videoKbps: segMode === "video" ? videoKbps : undefined,
+        hasAudio: splitMeta.hasAudio,
+        targetSizeBytes: TARGET_BYTES,
+        estimatedSeconds: Math.max(5, Math.ceil(segDur / (segMode === "audio-only" ? 4 : 3))),
+      };
+
+      // Map the per-part progress into the global budget. Reserve the first
+      // 10% of the part's span for the split (already done), 70% for compress,
+      // 20% for upload.
+      const compressStart = partBase + partSpan * 0.1;
+      const compressEnd = partBase + partSpan * 0.8;
+      const uploadStart = partBase + partSpan * 0.8;
+      const uploadEnd = partBase + partSpan;
+
+      const partTmpDir = fs.mkdtempSync(path.join(tmpDir, `compress-${partNumber}-`));
+      // Wrap the inner emitter so the user sees "Part 2 of 3 · compressing…" labels.
+      const innerProgress: ProgressSink = (p) => {
+        const labelPrefix = `Part ${partNumber} of ${N}: `;
+        onProgress({
+          ...p,
+          message: p.message ? labelPrefix + p.message : labelPrefix,
+        });
+      };
+      const { videoId } = await compressAndUploadOne(
+        segInfo,
+        partTmpDir,
+        baseUrl,
+        password,
+        innerProgress,
+        ctx,
+        { compressStart, compressEnd, uploadStart, uploadEnd },
+      );
+
+      if (i === 0) {
+        parentVideoId = videoId;
+      } else {
+        childIds.push(videoId);
+      }
+
+      // Free the split file as soon as we're done uploading it.
+      try {
+        fs.unlinkSync(splitPath);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (ctx.canceled) throw new Error("canceled");
+
+    // ─── Finalize (single call, links children to parent) ───────────
+    onProgress({
+      phase: "finalizing",
+      progress: 0,
+      overallProgress: 0.97,
+      message: `Queuing ${N}-part upload for processing…`,
+    });
+    await fetchJson(`${baseUrl}/api/finalize-upload`, {
+      method: "POST",
+      headers: {
+        "X-Site-Password": password,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ videoId: parentVideoId, childIds }),
+    });
+
+    const resultUrl = `${baseUrl}/video/${parentVideoId}`;
+    onProgress({ phase: "done", progress: 1, overallProgress: 1, message: `Done · ${N} parts` });
+    return { videoId: parentVideoId, resultUrl };
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Stream-copy a slice of the source: fast, lossless, no re-encoding.
+ * Output container is .mkv because Matroska tolerates arbitrary stream
+ * cuts (mid-GOP) better than MP4 — the next compress pass will re-encode
+ * anyway, so container choice doesn't matter for downstream quality.
+ */
+function runStreamCopySplit(
+  inputPath: string,
+  startSec: number,
+  durSec: number,
+  outPath: string,
+  ctx: RunContext,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const args = [
+      "-hide_banner",
+      "-nostats",
+      "-loglevel",
+      "error",
+      "-analyzeduration",
+      "100M",
+      "-probesize",
+      "100M",
+      "-y",
+      "-ss",
+      String(startSec),
+      "-i",
+      inputPath,
+      "-t",
+      String(durSec),
+      "-c",
+      "copy",
+      "-map",
+      "0:v:0?",
+      "-map",
+      "0:a:0?",
+      outPath,
+    ];
+    const proc = spawn(FFMPEG, args);
+    ctx.ffmpegProc = proc;
+    let errBuf = "";
+    proc.stderr.on("data", (d: Buffer) => {
+      errBuf += d.toString();
+      if (errBuf.length > 50_000) errBuf = errBuf.slice(-10_000);
+    });
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      ctx.ffmpegProc = null;
+      if (ctx.canceled) return reject(new Error("canceled"));
+      if (code === 0) return resolve();
+      reject(mapFfmpegError(code ?? -1, errBuf));
+    });
+  });
 }
 
 /**

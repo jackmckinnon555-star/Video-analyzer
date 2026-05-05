@@ -76,6 +76,12 @@ export interface Video {
   public_slug: string | null;
   /** Which transcription backend(s) succeeded — "groq", "cloudflare", or "mixed". */
   transcribe_backend: string | null;
+  /** For multi-part uploads of very long source files. NULL on standalones.
+   *  Part 1 is the parent (parent_video_id IS NULL, part_index = 1).
+   *  Parts 2..N reference the parent via parent_video_id. */
+  parent_video_id: string | null;
+  part_index: number | null;
+  total_parts: number | null;
   error: string | null;
   dispatched_at: string | null;
   created_at: string;

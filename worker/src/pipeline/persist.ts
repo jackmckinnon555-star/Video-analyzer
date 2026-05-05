@@ -79,14 +79,56 @@ export async function savePreviewPath(videoId: string, storagePath: string): Pro
   if (error) throw error;
 }
 
-export async function getVideo(videoId: string): Promise<{ storage_path: string; filename: string } | null> {
+export async function getVideo(videoId: string): Promise<{
+  storage_path: string;
+  filename: string;
+  parent_video_id: string | null;
+  part_index: number | null;
+  total_parts: number | null;
+} | null> {
   const { data, error } = await sb()
     .from("videos")
-    .select("storage_path, filename")
+    .select("storage_path, filename, parent_video_id, part_index, total_parts")
     .eq("id", videoId)
     .single();
   if (error) return null;
   return data;
+}
+
+/**
+ * Fetch the parent + all children of a multi-part upload, ordered by
+ * part_index. Used by the worker when it sees a row that's the parent of
+ * a split source: pull all the file paths so we can transcribe them as one.
+ */
+export async function getVideoParts(parentId: string): Promise<
+  Array<{
+    id: string;
+    storage_path: string;
+    filename: string;
+    part_index: number | null;
+  }>
+> {
+  const { data, error } = await sb()
+    .from("videos")
+    .select("id, storage_path, filename, part_index")
+    .or(`id.eq.${parentId},parent_video_id.eq.${parentId}`)
+    .order("part_index", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Mark all child parts of a multi-part upload as `done` once the parent's
+ * analysis has saved. Children don't have their own results — clicking a
+ * child row in the dashboard redirects to the parent — but they should
+ * leave the transient states so the reaper doesn't churn on them.
+ */
+export async function markChildrenDone(parentId: string): Promise<void> {
+  const { error } = await sb()
+    .from("videos")
+    .update({ status: "done" })
+    .eq("parent_video_id", parentId);
+  if (error) throw error;
 }
 
 export async function markFailed(videoId: string, error: string): Promise<void> {

@@ -9,9 +9,14 @@ export function useVideos() {
   const query = useQuery<Video[]>({
     queryKey: ["videos"],
     queryFn: async () => {
+      // Hide child parts of multi-part uploads — only the parent (or
+      // standalones) shows in the dashboard. The parent's row carries the
+      // stitched results once processing completes; clicking a child
+      // would 404, so we filter at query time.
       const { data, error } = await supabase
         .from("videos")
         .select("*")
+        .is("parent_video_id", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Video[];

@@ -22,6 +22,11 @@ export interface PresignUploadResponse {
 
 export interface FinalizeUploadRequest {
   videoId: string;
+  /** For multi-part uploads of very long source files. videoId is the
+   *  parent (part 1); childIds is parts 2..N in order. The endpoint
+   *  links them via parent_video_id / part_index / total_parts and
+   *  dispatches the worker only once for the parent. */
+  childIds?: string[];
 }
 
 export interface FinalizeUploadResponse {

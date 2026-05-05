@@ -54,10 +54,26 @@ export function VideoRow({ video }: { video: Video }) {
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
           <StatusBadge status={video.status} />
+          {video.total_parts && video.total_parts > 1 && (
+            <span
+              className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+              title="This source was split into parts on upload; results are stitched."
+            >
+              {video.total_parts} parts
+            </span>
+          )}
           <span>{formatBytes(video.size_bytes)}</span>
           <span>{new Date(video.created_at).toLocaleString()}</span>
           {video.detected_language && (
             <span className="uppercase">{video.detected_language}</span>
+          )}
+          {video.transcribe_backend && video.status === "done" && (
+            <span
+              className="text-[10px] uppercase tracking-wide text-neutral-400"
+              title={`Transcribed via ${video.transcribe_backend}`}
+            >
+              {video.transcribe_backend}
+            </span>
           )}
         </div>
         {progressMessage && video.status !== "done" && video.status !== "failed" && (

@@ -5,15 +5,54 @@ import { sendFailureAlert } from "../../shared/lib/alert.js";
 
 const BodySchema = z.object({
   videoId: z.string().uuid(),
+  // Optional list of additional uploaded video rows that, together with
+  // videoId, make up a single logical upload (long source split into ~6 hr
+  // parts). videoId is part 1; childIds are parts 2..N in order.
+  childIds: z.array(z.string().uuid()).max(10).optional(),
 });
 
 export default async (req: Request): Promise<Response> => {
   try {
     if (req.method !== "POST") throw httpError(405, "Method not allowed");
     verifySitePassword(req);
-    const { videoId } = BodySchema.parse(await req.json());
+    const { videoId, childIds = [] } = BodySchema.parse(await req.json());
 
-    // Atomic status transition: pending -> queued, once.
+    // Multi-part upload: link children to the parent so the worker can find
+    // them. Part 1 (videoId) keeps parent_video_id = NULL; parts 2..N point
+    // back at it. All rows get part_index + total_parts set so the dashboard
+    // can show "Part k of N".
+    if (childIds.length > 0) {
+      const totalParts = childIds.length + 1;
+      const admin = adminClient();
+      // Mark the parent as part 1.
+      const { error: pErr } = await admin
+        .from("videos")
+        .update({ part_index: 1, total_parts: totalParts })
+        .eq("id", videoId);
+      if (pErr) throw httpError(500, `Parent linkage failed: ${pErr.message}`);
+      // Link children with their indices.
+      for (let i = 0; i < childIds.length; i++) {
+        const childId = childIds[i]!;
+        const { error: cErr } = await admin
+          .from("videos")
+          .update({
+            parent_video_id: videoId,
+            part_index: i + 2,
+            total_parts: totalParts,
+            // Children get queued straight to "transcribing"-eligible state but
+            // never get their own dispatch — the parent's worker pulls them.
+            status: "queued",
+            dispatched_at: new Date().toISOString(),
+          })
+          .eq("id", childId)
+          .eq("status", "pending");
+        if (cErr) throw httpError(500, `Child ${i + 2} linkage failed: ${cErr.message}`);
+      }
+    }
+
+    // Atomic status transition: pending -> queued, once. Only the parent
+    // (or a standalone) is dispatched; children ride along inside the
+    // parent's single worker run.
     const { data, error } = await adminClient()
       .from("videos")
       .update({ status: "queued", dispatched_at: new Date().toISOString() })

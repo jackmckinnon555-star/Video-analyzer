@@ -19,6 +19,15 @@ export interface ProbeResult {
   hasAudio: boolean;
   targetSizeBytes: number;
   estimatedSeconds: number;
+  /** Multi-part plan when duration exceeds the audio-only ladder (~14.5 hr).
+   *  When set, the orchestrator stream-copies the source into N segments and
+   *  uploads each as its own video, linking them as parts of one logical upload. */
+  partPlan?: PartPlan;
+}
+
+export interface PartPlan {
+  totalParts: number;
+  segmentSeconds: number;
 }
 
 export interface CompressOptions {
