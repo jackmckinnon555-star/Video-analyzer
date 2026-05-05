@@ -150,9 +150,15 @@ api.onProgress((p) => {
     case "compressing":
       $("phase-label").textContent = `Compressing… ${Math.round((p.progress ?? 0) * 100)}%`;
       break;
-    case "uploading":
-      $("phase-label").textContent = `Uploading… ${Math.round((p.progress ?? 0) * 100)}%`;
+    case "uploading": {
+      const pct = Math.round((p.progress ?? 0) * 100);
+      const attemptSuffix =
+        p.attempt && p.attempt > 1 && p.maxAttempts
+          ? ` · retry ${p.attempt}/${p.maxAttempts}`
+          : "";
+      $("phase-label").textContent = `Uploading… ${pct}%${attemptSuffix}`;
       break;
+    }
     case "finalizing":
       $("phase-label").textContent = "Queuing for processing…";
       break;
