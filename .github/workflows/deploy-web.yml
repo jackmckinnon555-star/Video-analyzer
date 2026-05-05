@@ -48,6 +48,7 @@ jobs:
         uses: nwtgck/actions-netlify@v3.0
         with:
           publish-dir: web/dist
+          functions-dir: netlify/functions
           production-deploy: true
           deploy-message: "GHA deploy from ${{ github.sha }}"
           enable-pull-request-comment: false
@@ -56,4 +57,4 @@ jobs:
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        timeout-minutes: 5
+        timeout-minutes: 10
