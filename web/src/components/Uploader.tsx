@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useUpload, type UploadState } from "../hooks/useUpload";
 import { formatBytes } from "../lib/format";
+import { InstallerModal } from "./InstallerModal";
 
 const SUPPORTED_EXT = new Set([
   "mp4", "mov", "m4v", "mkv", "webm", "avi", "wmv",
@@ -17,7 +18,8 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
     if (!file) return;
     try {
       const id = await upload(file);
-      onDone?.(id);
+      // upload() returns null when the file is oversize — the modal handles UX from there.
+      if (id) onDone?.(id);
     } catch {
       /* state.error set */
     } finally {
@@ -30,6 +32,7 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
     state.phase === "uploading" ||
     state.phase === "finalizing";
   const showActive = busy || state.phase === "done" || state.phase === "error" || state.phase === "canceled";
+  const showOversize = state.phase === "oversize" && state.file != null && state.originalSizeBytes != null;
 
   return (
     <div className="rounded-lg border border-dashed border-neutral-300 p-6 dark:border-neutral-700">
@@ -56,6 +59,14 @@ export function Uploader({ onDone }: { onDone?: (videoId: string) => void }) {
         hidden
         onChange={onChange}
       />
+
+      {showOversize && state.file && state.originalSizeBytes != null && (
+        <InstallerModal
+          fileName={state.file.name}
+          fileSize={state.originalSizeBytes}
+          onClose={reset}
+        />
+      )}
     </div>
   );
 }

@@ -9,7 +9,9 @@ export type UploadPhase =
   | "finalizing"
   | "done"
   | "canceled"
-  | "error";
+  | "error"
+  /** File too big for the browser path; renderer should show the installer modal. */
+  | "oversize";
 
 export interface UploadState {
   phase: UploadPhase;
@@ -36,7 +38,7 @@ const initial: UploadState = {
 };
 
 /** Supabase Storage enforces a 50 MB cap on signed PUTs for this project. */
-const UPLOAD_CAP_BYTES = 50 * 1024 * 1024;
+export const UPLOAD_CAP_BYTES = 50 * 1024 * 1024;
 
 class UploadCanceledError extends Error {
   constructor() {
@@ -53,25 +55,25 @@ export function useUpload() {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Files above the Supabase cap can't go through the browser at all —
+    // surface the installer modal instead of attempting the network call.
+    if (file.size > UPLOAD_CAP_BYTES) {
+      setState({
+        ...initial,
+        originalSizeBytes: file.size,
+        file,
+        phase: "oversize",
+      });
+      // Return null so the caller can distinguish "use installer" from "completed".
+      return null;
+    }
+
     setState({
       ...initial,
       originalSizeBytes: file.size,
       file,
       phase: "presigning",
     });
-
-    // Files above the Supabase cap must be compressed before upload.
-    // The desktop uploader handles this in one click; point users there.
-    if (file.size > UPLOAD_CAP_BYTES) {
-      const msg = `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — above the 50 MB browser-upload cap.`;
-      setState((s) => ({
-        ...s,
-        phase: "error",
-        error: msg,
-        errorHint: "Use the desktop uploader — it compresses on your computer and uploads in one click.",
-      }));
-      throw new Error(msg);
-    }
 
     let phaseLabel: "presign" | "upload" | "finalize" = "presign";
     try {
