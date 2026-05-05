@@ -1,0 +1,53 @@
+name: Deploy web
+
+# Replaces Netlify's built-in Git auto-deploy: build the SPA in CI, push the
+# bundle to Netlify production via the CLI. Triggers on every push to main
+# that touches frontend or shared code, plus manual dispatch for ad-hoc redeploys.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "shared/**"
+      - "package.json"
+      - "package-lock.json"
+      - "netlify.toml"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch: {}
+
+# Only the latest commit on main needs to be live — cancel earlier runs in flight.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm --workspace web run build
+
+      - name: Deploy to Netlify production
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          npx --yes netlify-cli@latest deploy \
+            --prod \
+            --dir=web/dist \
+            --site="$NETLIFY_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" \
+            --message="GHA deploy from ${{ github.sha }}"
