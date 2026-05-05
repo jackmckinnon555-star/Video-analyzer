@@ -37,18 +37,26 @@ async function main(): Promise<void> {
   try {
     await setStatus(videoId, "transcribing");
 
-    // The client-side ffmpeg.wasm compressor already pre-shrinks every upload
-    // to <=50 MB, so the uploaded file IS the playable preview. No server-side
-    // transcode needed; set the preview path up front so the UI can play back
-    // even mid-processing.
+    // The browser uploads files at <=50 MB directly; the desktop installer
+    // compresses on the client so its output is also <=50 MB. Either way,
+    // the uploaded file IS the playable preview — no server-side transcode
+    // needed. Set the preview path up front so the UI can play back even
+    // mid-processing.
     await savePreviewPath(videoId, row.storage_path);
 
     // 1. Download the uploaded video/audio from Supabase Storage.
     const videoPath = await downloadVideo(row.storage_path, workDir);
 
-    // 2. Probe duration.
+    // 2. Probe duration. Defense-in-depth guardrail: if the downloaded file
+    // doesn't have a readable duration, it isn't a valid media file —
+    // fail fast with a clear message before burning Groq quota.
     const duration = (await probeDurationSeconds(videoPath)) ?? 0;
-    if (duration > 0) await setDuration(videoId, duration);
+    if (duration <= 0) {
+      throw new Error(
+        "Uploaded file isn't a readable video or audio file. Please re-upload using the desktop installer or a different source.",
+      );
+    }
+    await setDuration(videoId, duration);
     log.info("duration probed", { duration });
 
     // 3. Extract audio + sampled frames in parallel.
