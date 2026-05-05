@@ -1,12 +1,20 @@
 -- Semantic search + RAG infrastructure.
 -- Runs after 0001-0005.
+--
+-- NOTE: The `embedding` column on video_chunks is vector(3072) for
+-- gemini-embedding-001's default output. pgvector's HNSW index has a hard
+-- 2000-dimension cap, so we use IVFFLAT (supports up to 16000 dims). For
+-- the small-team scale this app targets (low thousands of chunks), the
+-- planner often picks a sequential scan anyway; the index becomes useful
+-- only at higher volume.
 
--- The `embedding` column on video_chunks already exists (from 0001) as vector(3072)
--- for gemini-embedding-001 default output. Add an HNSW index for fast top-K
--- similarity lookup (HNSW is safe on free-tier Postgres; IVFFlat needs ANALYZE
--- and re-training after inserts).
-create index if not exists video_chunks_embedding_hnsw
-  on public.video_chunks using hnsw (embedding vector_cosine_ops);
+-- Drop the (possibly partial) HNSW attempt from earlier versions of this
+-- migration. Idempotent if the index doesn't exist.
+drop index if exists public.video_chunks_embedding_hnsw;
+
+create index if not exists video_chunks_embedding_ivfflat
+  on public.video_chunks using ivfflat (embedding vector_cosine_ops)
+  with (lists = 100);
 
 -- Helper function that the search endpoint calls. Returns rows sorted by
 -- cosine distance, with the parent video's title for display.
